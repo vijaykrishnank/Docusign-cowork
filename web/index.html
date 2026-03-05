@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DocuSign Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#080909; --surface:#111314; --border:#1e2124; --border2:#2a2e33;
+      --accent:#e8ff5a; --accent2:#b8d400; --text:#e4e8ec; --muted:#52575e;
+      --muted2:#373c42; --success:#4ade80; --error:#f87171; --warning:#fb923c;
+    }
+    body { background:var(--bg); color:var(--text); font-family:'Instrument Sans',sans-serif;
+           min-height:100vh; display:grid; grid-template-columns:290px 1fr; }
+
+    .sidebar { background:var(--surface); border-right:1px solid var(--border);
+               padding:28px 20px; display:flex; flex-direction:column; gap:24px;
+               position:sticky; top:0; height:100vh; overflow-y:auto; }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-mark { width:30px; height:30px; background:var(--accent); border-radius:7px;
+                 display:flex; align-items:center; justify-content:center;
+                 font-family:'Syne',sans-serif; font-weight:700; font-size:13px; color:#000; }
+    .logo-text { font-family:'Syne',sans-serif; font-weight:600; font-size:14px; }
+    .logo-sub  { font-size:10px; color:var(--muted); font-family:'IBM Plex Mono',monospace; }
+
+    .card { background:var(--bg); border:1px solid var(--border2); border-radius:10px; padding:14px; }
+    .card-label { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+                  text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px; }
+    .auth-row { display:flex; align-items:center; gap:8px; font-size:13px; }
+    .dot { width:6px; height:6px; border-radius:50%; background:var(--muted2); flex-shrink:0; }
+    .dot.on { background:var(--success); box-shadow:0 0 5px var(--success); }
+    .btn-sm { margin-top:10px; width:100%; padding:8px; border:none; border-radius:7px;
+              font-family:'Syne',sans-serif; font-weight:600; font-size:12px; cursor:pointer; transition:all 0.15s; }
+    .btn-accent { background:var(--accent); color:#000; }
+    .btn-accent:hover { background:var(--accent2); }
+    .btn-accent:disabled { opacity:0.35; cursor:not-allowed; }
+    .btn-ghost { background:transparent; color:var(--muted); border:1px solid var(--border2); }
+    .btn-ghost:hover { border-color:var(--error); color:var(--error); }
+
+    .pipeline { display:flex; flex-direction:column; gap:3px; }
+    .ps { display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:6px;
+          font-size:11px; color:var(--muted); transition:all 0.2s; border:1px solid transparent; }
+    .ps.running { background:rgba(232,255,90,0.06); border-color:rgba(232,255,90,0.15); color:var(--accent); }
+    .ps.done    { color:var(--success); }
+    .ps.error   { color:var(--error); }
+    .ps.review  { color:var(--warning); }
+    .ps-icon { width:18px; height:18px; border-radius:50%; border:1px solid currentColor;
+               display:flex; align-items:center; justify-content:center; font-size:8px;
+               flex-shrink:0; font-family:'IBM Plex Mono',monospace; }
+    .ps.running .ps-icon { animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .ps.done   .ps-icon { border-color:var(--success); background:rgba(74,222,128,0.1); }
+    .ps.error  .ps-icon { border-color:var(--error);   background:rgba(248,113,113,0.1); }
+    .ps.review .ps-icon { border-color:var(--warning);  background:rgba(251,146,60,0.1); }
+
+    .main { padding:48px 56px; max-width:660px; }
+    .page-title { font-family:'Syne',sans-serif; font-size:36px; font-weight:700;
+                  letter-spacing:-1px; line-height:1.1; margin-bottom:8px; }
+    .page-title span { color:var(--accent); }
+    .page-desc { color:var(--muted); font-size:14px; line-height:1.6; margin-bottom:36px; }
+
+    .form-section { margin-bottom:22px; }
+    .sec-label { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+                 text-transform:uppercase; letter-spacing:0.1em; margin-bottom:9px;
+                 display:flex; align-items:center; gap:8px; }
+    .sec-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    .upload-zone { border:1.5px dashed var(--border2); border-radius:12px; padding:32px 20px;
+                   text-align:center; cursor:pointer; transition:all 0.2s; position:relative;
+                   background:var(--surface); }
+    .upload-zone:hover,.upload-zone.drag { border-color:var(--accent); background:rgba(232,255,90,0.03); }
+    .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+    .upload-icon { font-size:28px; margin-bottom:8px; }
+    .upload-hint { font-size:13px; color:var(--muted); }
+    .upload-hint strong { color:var(--text); }
+    .file-badge { display:inline-flex; align-items:center; gap:5px; margin-top:8px;
+                  background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2);
+                  color:var(--success); padding:3px 10px; border-radius:20px;
+                  font-family:'IBM Plex Mono',monospace; font-size:10px; }
+
+    .input-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .field { display:flex; flex-direction:column; gap:5px; }
+    label { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+            text-transform:uppercase; letter-spacing:0.08em; }
+    input[type="text"],input[type="email"] { background:var(--surface); border:1px solid var(--border2);
+      border-radius:8px; padding:10px 13px; color:var(--text); font-size:13px;
+      font-family:'Instrument Sans',sans-serif; outline:none; transition:border-color 0.15s; width:100%; }
+    input:focus { border-color:var(--accent); }
+
+    .btn-send { width:100%; padding:13px; background:var(--accent); color:#000; border:none;
+                border-radius:10px; font-family:'Syne',sans-serif; font-weight:700; font-size:14px;
+                cursor:pointer; transition:all 0.15s; margin-top:6px; }
+    .btn-send:hover:not(:disabled) { background:var(--accent2); transform:translateY(-1px); }
+    .btn-send:disabled { opacity:0.35; cursor:not-allowed; transform:none; }
+
+    .log-stream { display:none; margin-top:16px; background:var(--bg); border:1px solid var(--border);
+                  border-radius:8px; padding:12px 14px; max-height:140px; overflow-y:auto; }
+    .log-stream.show { display:block; }
+    .log-line { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted);
+                padding:2px 0; display:flex; gap:10px; }
+    .log-line.running { color:var(--accent); }
+    .log-line.done    { color:var(--success); }
+    .log-line.error   { color:var(--error); }
+    .log-time { color:var(--muted2); flex-shrink:0; }
+
+    /* Review card */
+    .review-card { display:none; margin-top:20px; background:var(--surface);
+                   border:1px solid rgba(251,146,60,0.3); border-radius:12px; padding:22px; }
+    .review-card.show { display:block; }
+    .review-title { font-family:'Syne',sans-serif; font-weight:600; font-size:15px;
+                    color:var(--warning); margin-bottom:12px; }
+    .review-desc { font-size:13px; color:var(--muted); line-height:1.6; margin-bottom:16px; }
+    .review-actions { display:flex; gap:10px; }
+    .btn-review { display:inline-flex; align-items:center; gap:6px; padding:9px 18px;
+                  background:rgba(251,146,60,0.1); border:1px solid rgba(251,146,60,0.3);
+                  color:var(--warning); border-radius:8px; font-size:13px; font-family:'Syne',sans-serif;
+                  font-weight:600; cursor:pointer; text-decoration:none; transition:all 0.15s; }
+    .btn-review:hover { background:rgba(251,146,60,0.2); }
+    .btn-confirm { padding:9px 18px; background:var(--accent); color:#000; border:none;
+                   border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:13px;
+                   cursor:pointer; transition:all 0.15s; }
+    .btn-confirm:hover { background:var(--accent2); }
+    .btn-confirm:disabled { opacity:0.4; cursor:not-allowed; }
+
+    /* Result */
+    .result { display:none; margin-top:20px; background:var(--surface); border:1px solid var(--border2);
+              border-radius:12px; padding:22px; }
+    .result.show { display:block; }
+    .result.success { border-color:rgba(74,222,128,0.3); }
+    .result.error   { border-color:rgba(248,113,113,0.3); }
+    .result-title { font-family:'Syne',sans-serif; font-weight:600; font-size:15px; margin-bottom:14px; }
+    .result.success .result-title { color:var(--success); }
+    .result.error   .result-title { color:var(--error); }
+    .meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+    .meta-item { background:var(--bg); border-radius:7px; padding:10px; }
+    .meta-key  { font-size:9px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+                 text-transform:uppercase; letter-spacing:0.08em; margin-bottom:3px; }
+    .meta-val  { font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--text); word-break:break-all; }
+    .error-msg { font-size:11px; color:var(--error); font-family:'IBM Plex Mono',monospace;
+                 line-height:1.6; background:var(--bg); border-radius:7px; padding:10px; }
+  </style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">DS</div>
+    <div>
+      <div class="logo-text">DocuSign Agent</div>
+      <div class="logo-sub">powered by Claude</div>
+    </div>
+  </div>
+
+
+
+  <div>
+    <div class="card-label">Pipeline</div>
+    <div class="pipeline">
+      <div class="ps" id="ps-1"><div class="ps-icon">1</div><span>Convert PDF → Images</span></div>
+      <div class="ps" id="ps-2"><div class="ps-icon">2</div><span>Detect fields (Claude)</span></div>
+      <div class="ps" id="ps-3"><div class="ps-icon">3</div><span>Build DocuSign tabs</span></div>
+      <div class="ps" id="ps-4"><div class="ps-icon">4</div><span>Create template</span></div>
+      <div class="ps" id="ps-5"><div class="ps-icon">5</div><span>Review & send</span></div>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+  <h1 class="page-title">Send a document<br>for <span>signature.</span></h1>
+  <p class="page-desc">Upload any PDF — Claude detects all fields, creates a DocuSign template, and lets you review placement before sending to your recipient.</p>
+
+  <div class="form-section">
+    <div class="sec-label">Document</div>
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="pdf-input" accept=".pdf" onchange="handleFile(this)"/>
+      <div class="upload-icon">📄</div>
+      <div class="upload-hint"><strong>Drop your PDF here</strong> or click to browse</div>
+      <div id="file-badge"></div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="sec-label">Recipient</div>
+    <div class="input-row">
+      <div class="field">
+        <label>Full Name</label>
+        <input type="text" id="signer-name" placeholder="John Smith" oninput="checkReady()"/>
+      </div>
+      <div class="field">
+        <label>Email Address</label>
+        <input type="email" id="signer-email" placeholder="john@example.com" oninput="checkReady()"/>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-send" id="btn-send" onclick="startPipeline()" disabled>
+    Detect Fields & Create Template →
+  </button>
+
+  <div class="log-stream" id="log-stream"></div>
+
+  <!-- Review step -->
+  <div class="review-card" id="review-card">
+    <div class="review-title">👀 Review tab placement before sending</div>
+    <div class="review-desc">
+      Claude has placed tabs on all detected fields. Open the DocuSign template editor to review and adjust positions, then click <strong>Send Envelope</strong> when ready.
+    </div>
+    <div class="review-actions">
+      <a id="review-link" href="#" target="_blank" class="btn-review">Open in DocuSign →</a>
+      <button class="btn-confirm" id="btn-confirm" onclick="confirmSend()">✉️ Send Envelope</button>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result" id="result">
+    <div class="result-title" id="result-title"></div>
+    <div id="result-body"></div>
+  </div>
+</main>
+
+<script>
+  let fileSelected = false, currentJobId = null;
+
+
+
+  function handleFile(input) {
+    if (input.files[0]) {
+      fileSelected = true;
+      document.getElementById('file-badge').innerHTML =
+        `<span class="file-badge">📎 ${input.files[0].name}</span>`;
+      checkReady();
+    }
+  }
+
+  const zone = document.getElementById('upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f?.type === 'application/pdf') {
+      document.getElementById('pdf-input').files = e.dataTransfer.files;
+      handleFile(document.getElementById('pdf-input'));
+    }
+  });
+
+  function checkReady() {
+    const name  = document.getElementById('signer-name').value.trim();
+    const email = document.getElementById('signer-email').value.trim();
+    document.getElementById('btn-send').disabled = !(fileSelected && name && email);
+  }
+
+  function setPipe(step, state) {
+    const el = document.getElementById(`ps-${step}`);
+    if (!el) return;
+    el.className = `ps ${state}`;
+    const icons = { running:'◌', done:'✓', error:'✕', review:'!' };
+    el.querySelector('.ps-icon').textContent = icons[state] ?? step;
+  }
+
+  function addLog(msg, state) {
+    const log = document.getElementById('log-stream');
+    log.classList.add('show');
+    const time = new Date().toLocaleTimeString('en', {hour12:false});
+    const line = document.createElement('div');
+    line.className = `log-line ${state}`;
+    line.innerHTML = `<span class="log-time">${time}</span><span>${msg}</span>`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function startPipeline() {
+    const btn   = document.getElementById('btn-send');
+    const name  = document.getElementById('signer-name').value.trim();
+    const email = document.getElementById('signer-email').value.trim();
+    const file  = document.getElementById('pdf-input').files[0];
+
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    document.getElementById('log-stream').innerHTML = '';
+    document.getElementById('log-stream').classList.remove('show');
+    document.getElementById('review-card').className = 'review-card';
+    document.getElementById('result').className = 'result';
+    currentJobId = null;
+
+    // Convert PDF to base64 to avoid Railway multipart proxy issues
+    const pdf_base64 = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+
+    const res = await fetch('/agent/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pdf_base64,
+        filename:     file.name,
+        signer_name:  name,
+        signer_email: email
+      })
+    });
+    const reader = res.body.getReader();
+    const dec    = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream:true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const d = JSON.parse(line.slice(6));
+        if (d.status === 'running')  { setPipe(d.step, 'running'); addLog(d.message, 'running'); }
+        if (d.status === 'done')     { setPipe(d.step, 'done');    addLog(d.message, 'done'); }
+        if (d.status === 'review')   {
+          setPipe(5, 'review');
+          addLog('Template ready — review before sending', 'running');
+          currentJobId = d.job_id;
+          document.getElementById('review-link').href = d.review_url;
+          document.getElementById('review-card').className = 'review-card show';
+        }
+        if (d.status === 'error') {
+          addLog(d.message, 'error');
+          showError(d.message);
+        }
+      }
+    }
+    btn.textContent = 'Detect Fields & Create Template →';
+    checkReady();
+  }
+
+  async function confirmSend() {
+    if (!currentJobId) return;
+    const btn  = document.getElementById('btn-confirm');
+    const name  = document.getElementById('signer-name').value.trim();
+    const email = document.getElementById('signer-email').value.trim();
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    const r = await fetch(`/agent/confirm/${currentJobId}`, { method:'POST' });
+    const d = await r.json();
+
+    if (d.ok) {
+      setPipe(5, 'done');
+      addLog('Envelope sent!', 'done');
+      document.getElementById('review-card').className = 'review-card';
+      const res = document.getElementById('result');
+      res.className = 'result show success';
+      document.getElementById('result-title').textContent = '✓ Envelope sent successfully';
+      document.getElementById('result-body').innerHTML = `
+        <div class="meta-grid">
+          <div class="meta-item"><div class="meta-key">Envelope ID</div><div class="meta-val">${d.envelope_id}</div></div>
+          <div class="meta-item"><div class="meta-key">Template ID</div><div class="meta-val">${d.template_id}</div></div>
+          <div class="meta-item"><div class="meta-key">Recipient</div><div class="meta-val">${d.signer_name}</div></div>
+          <div class="meta-item"><div class="meta-key">Email</div><div class="meta-val">${d.signer_email}</div></div>
+        </div>`;
+    } else {
+      showError(d.error);
+      btn.disabled = false;
+      btn.textContent = '✉️ Send Envelope';
+    }
+  }
+
+  function showError(msg) {
+    const res = document.getElementById('result');
+    res.className = 'result show error';
+    document.getElementById('result-title').textContent = '✕ Something went wrong';
+    document.getElementById('result-body').innerHTML = `<div class="error-msg">${msg}</div>`;
+  }
+
+
+</script>
+</body>
+</html>

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DocuSign Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#080909; --surface:#111314; --border:#1e2124; --border2:#2a2e33;
+      --accent:#e8ff5a; --accent2:#b8d400; --text:#e4e8ec; --muted:#52575e;
+      --muted2:#373c42; --success:#4ade80; --error:#f87171;
+    }
+    body { background:var(--bg); color:var(--text); font-family:'Instrument Sans',sans-serif;
+           min-height:100vh; display:grid; grid-template-columns:300px 1fr; }
+    .sidebar { background:var(--surface); border-right:1px solid var(--border);
+               padding:32px 24px; display:flex; flex-direction:column; gap:28px;
+               position:sticky; top:0; height:100vh; overflow-y:auto; }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-mark { width:32px; height:32px; background:var(--accent); border-radius:8px;
+                 display:flex; align-items:center; justify-content:center;
+                 font-family:'Syne',sans-serif; font-weight:700; font-size:14px; color:#000; }
+    .logo-text { font-family:'Syne',sans-serif; font-weight:600; font-size:15px; }
+    .logo-sub  { font-size:11px; color:var(--muted); font-family:'IBM Plex Mono',monospace; }
+    .auth-card { background:var(--bg); border:1px solid var(--border2); border-radius:10px; padding:16px; }
+    .card-label { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+                  text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px; }
+    .auth-row { display:flex; align-items:center; gap:8px; font-size:13px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--muted2); flex-shrink:0; }
+    .dot.on { background:var(--success); box-shadow:0 0 6px var(--success); }
+    .btn-connect { margin-top:12px; width:100%; padding:9px; background:var(--accent); color:#000;
+                   border:none; border-radius:7px; font-family:'Syne',sans-serif; font-weight:600;
+                   font-size:13px; cursor:pointer; transition:background 0.15s; }
+    .btn-connect:hover { background:var(--accent2); }
+    .btn-connect:disabled { opacity:0.4; cursor:not-allowed; }
+    .pipeline { display:flex; flex-direction:column; gap:4px; }
+    .ps { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:7px;
+          font-size:12px; color:var(--muted); transition:all 0.2s; border:1px solid transparent; }
+    .ps.running { background:rgba(232,255,90,0.06); border-color:rgba(232,255,90,0.15); color:var(--accent); }
+    .ps.done    { color:var(--success); }
+    .ps.error   { color:var(--error); }
+    .ps-icon { width:20px; height:20px; border-radius:50%; border:1px solid currentColor;
+               display:flex; align-items:center; justify-content:center; font-size:9px;
+               flex-shrink:0; font-family:'IBM Plex Mono',monospace; }
+    .ps.running .ps-icon { animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .ps.done  .ps-icon { border-color:var(--success); background:rgba(74,222,128,0.1); }
+    .ps.error .ps-icon { border-color:var(--error);   background:rgba(248,113,113,0.1); }
+    .main { padding:52px 60px; max-width:680px; }
+    .page-title { font-family:'Syne',sans-serif; font-size:38px; font-weight:700;
+                  letter-spacing:-1.2px; line-height:1.1; margin-bottom:10px; }
+    .page-title span { color:var(--accent); }
+    .page-desc { color:var(--muted); font-size:14px; line-height:1.6; margin-bottom:40px; }
+    .form-section { margin-bottom:24px; }
+    .sec-label { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+                 text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px;
+                 display:flex; align-items:center; gap:8px; }
+    .sec-label::after { content:''; flex:1; height:1px; background:var(--border); }
+    .upload-zone { border:1.5px dashed var(--border2); border-radius:12px; padding:36px 24px;
+                   text-align:center; cursor:pointer; transition:all 0.2s; position:relative;
+                   background:var(--surface); }
+    .upload-zone:hover,.upload-zone.drag { border-color:var(--accent); background:rgba(232,255,90,0.03); }
+    .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+    .upload-icon { font-size:30px; margin-bottom:8px; }
+    .upload-hint { font-size:13px; color:var(--muted); }
+    .upload-hint strong { color:var(--text); }
+    .file-badge { display:inline-flex; align-items:center; gap:6px; margin-top:10px;
+                  background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2);
+                  color:var(--success); padding:4px 12px; border-radius:20px;
+                  font-family:'IBM Plex Mono',monospace; font-size:11px; }
+    .input-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .field { display:flex; flex-direction:column; gap:6px; }
+    label { font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+            text-transform:uppercase; letter-spacing:0.08em; }
+    input[type="text"],input[type="email"] { background:var(--surface); border:1px solid var(--border2);
+      border-radius:8px; padding:11px 14px; color:var(--text); font-size:14px;
+      font-family:'Instrument Sans',sans-serif; outline:none; transition:border-color 0.15s; width:100%; }
+    input:focus { border-color:var(--accent); }
+    .btn-send { width:100%; padding:14px; background:var(--accent); color:#000; border:none;
+                border-radius:10px; font-family:'Syne',sans-serif; font-weight:700; font-size:15px;
+                cursor:pointer; transition:all 0.15s; margin-top:8px; }
+    .btn-send:hover:not(:disabled) { background:var(--accent2); transform:translateY(-1px); }
+    .btn-send:disabled { opacity:0.35; cursor:not-allowed; transform:none; }
+    .log-stream { display:none; margin-top:20px; background:var(--bg); border:1px solid var(--border);
+                  border-radius:8px; padding:14px 16px; max-height:160px; overflow-y:auto; }
+    .log-stream.show { display:block; }
+    .log-line { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);
+                padding:2px 0; display:flex; gap:10px; }
+    .log-line.running { color:var(--accent); }
+    .log-line.done    { color:var(--success); }
+    .log-line.error   { color:var(--error); }
+    .log-time { color:var(--muted2); flex-shrink:0; }
+    .result { display:none; margin-top:24px; background:var(--surface); border:1px solid var(--border2);
+              border-radius:12px; padding:24px; }
+    .result.show { display:block; }
+    .result.success { border-color:rgba(74,222,128,0.3); }
+    .result.error   { border-color:rgba(248,113,113,0.3); }
+    .result-title { font-family:'Syne',sans-serif; font-weight:600; font-size:16px; margin-bottom:16px; }
+    .result.success .result-title { color:var(--success); }
+    .result.error   .result-title { color:var(--error); }
+    .meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .meta-item { background:var(--bg); border-radius:8px; padding:12px; }
+    .meta-key  { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted);
+                 text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px; }
+    .meta-val  { font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--text); word-break:break-all; }
+    .error-msg { font-size:12px; color:var(--error); font-family:'IBM Plex Mono',monospace;
+                 line-height:1.6; background:var(--bg); border-radius:8px; padding:12px; }
+  </style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">DS</div>
+    <div>
+      <div class="logo-text">DocuSign Agent</div>
+      <div class="logo-sub">powered by Claude</div>
+    </div>
+  </div>
+  <div class="auth-card">
+    <div class="card-label">DocuSign</div>
+    <div class="auth-row">
+      <div class="dot" id="auth-dot"></div>
+      <span id="auth-text">Not connected</span>
+    </div>
+    <button class="btn-connect" id="btn-connect" onclick="connectDocuSign()">Connect to DocuSign</button>
+  </div>
+  <div>
+    <div class="card-label">Pipeline</div>
+    <div style="margin-bottom:8px;">
+      <a href="/chat" style="display:flex;align-items:center;gap:8px;padding:9px 12px;
+         background:#0f1117;border:1px solid #1f2028;border-radius:10px;
+         text-decoration:none;color:#9ca3af;font-size:12px;font-weight:600;
+         transition:border-color .15s,color .15s;"
+         onmouseover="this.style.borderColor='#1a56db';this.style.color='#60a5fa'"
+         onmouseout="this.style.borderColor='#1f2028';this.style.color='#9ca3af'">
+        <span style="font-size:15px;">✦</span>
+        <span>Open AI Assistant</span>
+        <span style="margin-left:auto;font-size:10px;opacity:.5;">↗</span>
+      </a>
+    </div>
+    <div class="pipeline">
+      <div class="ps" id="ps-1"><div class="ps-icon">1</div><span>Convert PDF → Images</span></div>
+      <div class="ps" id="ps-2"><div class="ps-icon">2</div><span>Detect fields (Claude)</span></div>
+      <div class="ps" id="ps-3"><div class="ps-icon">3</div><span>Build tabs</span></div>
+      <div class="ps" id="ps-4"><div class="ps-icon">4</div><span>Generate summary (Claude)</span></div>
+      <div class="ps" id="ps-5"><div class="ps-icon">5</div><span>Create template</span></div>
+      <div class="ps" id="ps-6"><div class="ps-icon">6</div><span>Send envelope</span></div>
+    </div>
+  </div>
+</aside>
+<main class="main">
+  <h1 class="page-title">Send a document<br>for <span>signature.</span></h1>
+  <p class="page-desc">Upload any PDF — Claude detects all fields, places tabs, and sends the envelope to your recipient automatically.</p>
+  <div class="form-section">
+    <div class="sec-label">Document</div>
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="pdf-input" accept=".pdf" onchange="handleFile(this)"/>
+      <div class="upload-icon">📄</div>
+      <div class="upload-hint"><strong>Drop your PDF here</strong> or click to browse</div>
+      <div id="file-badge"></div>
+    </div>
+  </div>
+  <div class="form-section">
+    <div class="sec-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>Recipients</span>
+      <button onclick="addRecipient()" style="background:#1a56db;border:none;color:#fff;font-size:11px;
+        font-weight:700;padding:5px 12px;border-radius:6px;cursor:pointer;">+ Add Recipient</button>
+    </div>
+    <div id="recipients-list"></div>
+  </div>
+  <button class="btn-send" id="btn-send" onclick="sendEnvelope()" disabled>
+    Detect Fields &amp; Send Envelope →
+  </button>
+  <div class="log-stream" id="log-stream"></div>
+  <div class="result" id="result">
+    <div class="result-title" id="result-title"></div>
+    <div id="result-body"></div>
+  </div>
+</main>
+<script>
+  // Token stored in localStorage — survives page reloads, no server session needed
+  var dsAuth = null;
+  try { dsAuth = JSON.parse(localStorage.getItem('ds_auth')); } catch(e) {}
+
+  // Listen for token from OAuth popup
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ds_auth') {
+      dsAuth = e.data;
+      localStorage.setItem('ds_auth', JSON.stringify(dsAuth));
+      setAuthed(dsAuth.name);
+    }
+  });
+
+  async function connectDocuSign() {
+    var r = await fetch('/api/auth-url');
+    var d = await r.json();
+    window.open(d.url, 'docusign_auth', 'width=520,height=680');
+  }
+
+  function setAuthed(name) {
+    document.getElementById('auth-dot').classList.add('on');
+    document.getElementById('auth-text').textContent = name || 'Connected';
+    document.getElementById('btn-connect').textContent = '✓ Connected';
+    document.getElementById('btn-connect').disabled = true;
+    checkReady();
+  }
+
+  function handleFile(input) {
+    if (input.files[0]) {
+      document.getElementById('file-badge').innerHTML =
+        '<span class="file-badge">📎 ' + input.files[0].name + '</span>';
+      checkReady();
+    }
+  }
+
+  var zone = document.getElementById('upload-zone');
+  zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', function() { zone.classList.remove('drag'); });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault(); zone.classList.remove('drag');
+    var f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') {
+      document.getElementById('pdf-input').files = e.dataTransfer.files;
+      handleFile(document.getElementById('pdf-input'));
+    }
+  });
+
+  var recipientCount = 0;
+
+  function addRecipient() {
+    recipientCount++;
+    var id  = recipientCount;
+    var div = document.createElement('div');
+    div.id  = 'recipient-' + id;
+    div.style.cssText = 'background:#0f1117;border:1px solid #1f2028;border-radius:10px;padding:14px;margin-bottom:10px;';
+    div.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
+        '<span style="font-size:11px;font-weight:700;color:#6b7280;font-family:monospace;">RECIPIENT ' + id + '</span>' +
+        '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<label style="font-size:10px;color:#6b7280;">Order:</label>' +
+          '<input type="number" id="order-' + id + '" value="' + id + '" min="1" ' +
+            'style="width:48px;text-align:center;padding:4px;background:#080910;border:1px solid #1f2028;border-radius:6px;color:#e5e7eb;font-size:12px;" oninput="checkReady()"/>' +
+          (id > 1 ? '<button onclick="removeRecipient(' + id + ')" style="background:transparent;border:none;color:#6b7280;cursor:pointer;font-size:16px;line-height:1;">✕</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+        '<div class="field"><label>Full Name</label>' +
+          '<input type="text" id="rname-' + id + '" placeholder="Jane Smith" oninput="checkReady()"/></div>' +
+        '<div class="field"><label>Email</label>' +
+          '<input type="email" id="remail-' + id + '" placeholder="jane@company.com" oninput="checkReady()"/></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+        '<div class="field"><label>Role (optional)</label>' +
+          '<input type="text" id="rrole-' + id + '" placeholder="e.g. Employee, Client"/></div>' +
+        '<div class="field"><label>Notes (internal page only)</label>' +
+          '<input type="text" id="rnotes-' + id + '" placeholder="Context for internal recipients"/></div>' +
+      '</div>';
+    document.getElementById('recipients-list').appendChild(div);
+    checkReady();
+  }
+
+  function removeRecipient(id) {
+    var el = document.getElementById('recipient-' + id);
+    if (el) el.remove();
+    checkReady();
+  }
+
+  function getRecipients() {
+    var out = [];
+    for (var i = 1; i <= recipientCount; i++) {
+      var card = document.getElementById('recipient-' + i);
+      if (!card) continue;
+      var name  = (document.getElementById('rname-' + i) || {}).value.trim();
+      var email = (document.getElementById('remail-' + i) || {}).value.trim();
+      if (!name || !email) continue;
+      out.push({
+        recipient_id:  String(i),
+        name:          name,
+        email:         email,
+        role:          (document.getElementById('rrole-' + i) || {}).value.trim(),
+        notes:         (document.getElementById('rnotes-' + i) || {}).value.trim(),
+        routing_order: parseInt((document.getElementById('order-' + i) || {}).value) || i,
+      });
+    }
+    return out;
+  }
+
+  function checkReady() {
+    var recips = getRecipients();
+    var file   = document.getElementById('pdf-input').files[0];
+    var ok     = dsAuth && dsAuth.token && file && recips.length > 0 &&
+                 recips.every(function(r){ return r.name && r.email; });
+    document.getElementById('btn-send').disabled = !ok;
+  }
+
+  function setPipe(step, state) {
+    var el = document.getElementById('ps-' + step);
+    if (!el) return;
+    el.className = 'ps ' + state;
+    el.querySelector('.ps-icon').textContent = state === 'done' ? '✓' : state === 'error' ? '✕' : String(step);
+  }
+
+  function addLog(msg, state) {
+    var log  = document.getElementById('log-stream');
+    log.classList.add('show');
+    var time = new Date().toLocaleTimeString('en', {hour12: false});
+    var line = document.createElement('div');
+    line.className = 'log-line ' + state;
+    line.innerHTML = '<span class="log-time">' + time + '</span><span>' + msg + '</span>';
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function sendEnvelope() {
+    var btn       = document.getElementById('btn-send');
+    var recipients = getRecipients();
+    var file      = document.getElementById('pdf-input').files[0];
+    if (!recipients.length || !file) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    document.getElementById('log-stream').innerHTML = '';
+    document.getElementById('log-stream').classList.remove('show');
+    document.getElementById('result').className = 'result';
+
+    // Convert PDF to base64
+    var pdf_base64 = await new Promise(function(resolve) {
+      var reader = new FileReader();
+      reader.onload = function() { resolve(reader.result.split(',')[1]); };
+      reader.readAsDataURL(file);
+    });
+
+    // Send to server with token in body
+    var res = await fetch('/api/send', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        token:      dsAuth.token,
+        account_id:   dsAuth.account_id,
+        base_uri:     dsAuth.base_uri,
+        sender_email: dsAuth.email || '',
+        recipients:   recipients,
+        pdf_base64:   pdf_base64,
+        filename:     file.name,
+      })
+    });
+
+    var startData = await res.json();
+    if (startData.error) {
+      showError(startData.error);
+      btn.textContent = 'Detect Fields & Send Envelope →';
+      checkReady();
+      return;
+    }
+
+    var job_id  = startData.job_id;
+    var lastMsg = '';
+
+    // Poll every 3 seconds
+    var poll = setInterval(async function() {
+      var r2 = await fetch('/api/status/' + job_id);
+      var d  = await r2.json();
+
+      if (d.error) { clearInterval(poll); showError(d.error); btn.textContent = 'Detect Fields & Send Envelope →'; checkReady(); return; }
+      if (d.message && d.message !== lastMsg) {
+        lastMsg = d.message;
+        addLog(d.message, d.status === 'complete' ? 'done' : d.status === 'error' ? 'error' : 'running');
+        if (d.step > 0) setPipe(d.step, d.status === 'running' ? 'running' : d.status === 'complete' ? 'done' : 'error');
+      }
+
+      if (d.status === 'complete') {
+        clearInterval(poll);
+        for (var s = 1; s <= 5; s++) setPipe(s, 'done');
+        var rc = document.getElementById('result');
+        rc.className = 'result show success';
+        document.getElementById('result-title').textContent = '✓ Envelope sent successfully';
+        document.getElementById('result-body').innerHTML =
+          '<div class="meta-grid">' +
+          '<div class="meta-item"><div class="meta-key">Envelope ID</div><div class="meta-val">' + d.envelope_id + '</div></div>' +
+          '<div class="meta-item"><div class="meta-key">Template ID</div><div class="meta-val">' + d.template_id + '</div></div>' +
+          (d.recipients ? '<div class="meta-item" style="grid-column:span 2"><div class="meta-key">Recipients</div><div class="meta-val">' +
+            d.recipients.map(function(r){ return r.name + ' &lt;' + r.email + '&gt; ' + (r.is_internal ? '🔵 Internal' : '⚪ External'); }).join('<br/>') +
+          '</div></div>' : '') +
+
+          '</div>';
+        btn.textContent = 'Detect Fields & Send Envelope →';
+        checkReady();
+      } else if (d.status === 'error') {
+        clearInterval(poll);
+        showError(d.message);
+        btn.textContent = 'Detect Fields & Send Envelope →';
+        checkReady();
+      }
+    }, 3000);
+  }
+
+  function showError(msg) {
+    var rc = document.getElementById('result');
+    rc.className = 'result show error';
+    document.getElementById('result-title').textContent = '✕ Something went wrong';
+    document.getElementById('result-body').innerHTML = '<div class="error-msg">' + msg + '</div>';
+  }
+</script>
+</body>
+</html>

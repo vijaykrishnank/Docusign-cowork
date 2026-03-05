@@ -1,0 +1,11 @@
+flask==3.0.3
+anthropic
+requests
+pdf2image
+pillow
+python-dotenv
+gunicorn
+pypdf
+reportlab
+beautifulsoup4
+chromadb
