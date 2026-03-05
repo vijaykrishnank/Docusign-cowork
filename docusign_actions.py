@@ -138,13 +138,47 @@ def create_and_send_envelope(token, account_id, base_uri,
 # ══════════════════════════════════════════════════════════════
 
 def list_envelope_documents(token, account_id, base_uri, envelope_id):
-    """List all documents in an envelope."""
+    """List all documents in an envelope with metadata (name, pages, size)."""
     return _get(token, base_uri, account_id, f"/envelopes/{envelope_id}/documents")
 
 def get_envelope_document_info(token, account_id, base_uri, envelope_id, document_id):
     """Get metadata for a specific document in an envelope. Use 'combined' for merged PDF."""
     return _get(token, base_uri, account_id,
                 f"/envelopes/{envelope_id}/documents/{document_id}")
+
+def delete_envelope_documents(token, account_id, base_uri, envelope_id, document_ids):
+    """Delete one or more documents from a draft envelope.
+    document_ids: list of document ID strings e.g. ['1','2']"""
+    body = {"documents": [{"documentId": did} for did in document_ids]}
+    return _delete(token, base_uri, account_id,
+                   f"/envelopes/{envelope_id}/documents", body)
+
+def get_envelope_document_fields(token, account_id, base_uri, envelope_id, document_id):
+    """Get custom document fields (metadata) for a document in an envelope."""
+    return _get(token, base_uri, account_id,
+                f"/envelopes/{envelope_id}/documents/{document_id}/fields")
+
+def create_envelope_document_fields(token, account_id, base_uri, envelope_id,
+                                     document_id, document_fields):
+    """Create custom document fields on an envelope document.
+    document_fields: list of {name, value} objects."""
+    return _post(token, base_uri, account_id,
+                 f"/envelopes/{envelope_id}/documents/{document_id}/fields",
+                 {"documentFields": document_fields})
+
+def update_envelope_document_fields(token, account_id, base_uri, envelope_id,
+                                     document_id, document_fields):
+    """Update custom document fields on an envelope document."""
+    return _put(token, base_uri, account_id,
+                f"/envelopes/{envelope_id}/documents/{document_id}/fields",
+                {"documentFields": document_fields})
+
+def delete_envelope_document_fields(token, account_id, base_uri, envelope_id,
+                                     document_id, document_fields):
+    """Delete specific custom document fields from an envelope document."""
+    return _delete(token, base_uri, account_id,
+                   f"/envelopes/{envelope_id}/documents/{document_id}/fields",
+                   {"documentFields": document_fields})
 
 
 # ══════════════════════════════════════════════════════════════
@@ -278,13 +312,47 @@ def send_from_template(token, account_id, base_uri,
 # ══════════════════════════════════════════════════════════════
 
 def list_template_documents(token, account_id, base_uri, template_id):
-    """List all documents attached to a template."""
+    """List all documents attached to a template with metadata (name, pages, size)."""
     return _get(token, base_uri, account_id, f"/templates/{template_id}/documents")
 
 def get_template_document_info(token, account_id, base_uri, template_id, document_id):
-    """Get metadata for a specific document in a template."""
+    """Get PDF or metadata for a document in a template. Use 'combined' for all pages merged."""
     return _get(token, base_uri, account_id,
                 f"/templates/{template_id}/documents/{document_id}")
+
+def delete_template_documents(token, account_id, base_uri, template_id, document_ids):
+    """Delete one or more documents from a template.
+    document_ids: list of document ID strings e.g. ['1','2']"""
+    body = {"documents": [{"documentId": did} for did in document_ids]}
+    return _delete(token, base_uri, account_id,
+                   f"/templates/{template_id}/documents", body)
+
+def get_template_document_fields(token, account_id, base_uri, template_id, document_id):
+    """Get custom document fields (metadata) for a document in a template."""
+    return _get(token, base_uri, account_id,
+                f"/templates/{template_id}/documents/{document_id}/fields")
+
+def create_template_document_fields(token, account_id, base_uri, template_id,
+                                     document_id, document_fields):
+    """Create custom document fields on a template document.
+    document_fields: list of {name, value} objects."""
+    return _post(token, base_uri, account_id,
+                 f"/templates/{template_id}/documents/{document_id}/fields",
+                 {"documentFields": document_fields})
+
+def update_template_document_fields(token, account_id, base_uri, template_id,
+                                     document_id, document_fields):
+    """Update custom document fields on a template document."""
+    return _put(token, base_uri, account_id,
+                f"/templates/{template_id}/documents/{document_id}/fields",
+                {"documentFields": document_fields})
+
+def delete_template_document_fields(token, account_id, base_uri, template_id,
+                                     document_id, document_fields):
+    """Delete specific custom document fields from a template document."""
+    return _delete(token, base_uri, account_id,
+                   f"/templates/{template_id}/documents/{document_id}/fields",
+                   {"documentFields": document_fields})
 
 
 # ══════════════════════════════════════════════════════════════
@@ -456,6 +524,169 @@ def list_custom_tabs(token, account_id, base_uri):
 # TOOL DEFINITIONS FOR CLAUDE
 # ══════════════════════════════════════════════════════════════
 
+
+# ══════════════════════════════════════════════════════════════
+# SEND ENVELOPE WITH PDF
+# ══════════════════════════════════════════════════════════════
+
+def send_envelope_with_pdf(token, account_id, base_uri,
+                            pdf_base64, filename,
+                            recipients, subject,
+                            message="", anchor_tabs=None):
+    """Send a PDF as an envelope with recipients and optional anchor-based signature tabs.
+    
+    recipients: list of {name, email, recipient_id, routing_order}
+    anchor_tabs: optional list of {recipient_id, anchor_string, tab_type}
+                 e.g. [{"recipient_id":"1","anchor_string":"/sig1/","tab_type":"signHere"}]
+    If anchor_tabs is not provided, DocuSign will use any /sig/ anchors found in the PDF.
+    """
+    import base64 as b64mod
+
+    # Strip data URL prefix if present
+    clean_b64 = pdf_base64
+    if "," in pdf_base64[:100]:
+        clean_b64 = pdf_base64.split(",", 1)[1]
+    clean_b64 = clean_b64.strip()
+
+    # Build signers list
+    signers = []
+    for r in recipients:
+        signer = {
+            "name":         r["name"],
+            "email":        r["email"],
+            "recipientId":  str(r.get("recipient_id", "1")),
+            "routingOrder": str(r.get("routing_order", "1")),
+        }
+        # Add tabs for this recipient
+        if anchor_tabs:
+            tabs = {"signHereTabs": [], "dateSignedTabs": [], "fullNameTabs": [], "initialHereTabs": []}
+            for tab in anchor_tabs:
+                if str(tab.get("recipient_id")) != str(r.get("recipient_id", "1")):
+                    continue
+                tab_type = tab.get("tab_type", "signHere")
+                tab_entry = {
+                    "anchorString":  tab["anchor_string"],
+                    "anchorUnits":   "pixels",
+                    "anchorXOffset": str(tab.get("x_offset", 0)),
+                    "anchorYOffset": str(tab.get("y_offset", 0)),
+                }
+                if tab_type == "signHere":
+                    tabs["signHereTabs"].append(tab_entry)
+                elif tab_type == "dateSigned":
+                    tabs["dateSignedTabs"].append(tab_entry)
+                elif tab_type == "fullName":
+                    tabs["fullNameTabs"].append(tab_entry)
+                elif tab_type == "initialHere":
+                    tabs["initialHereTabs"].append(tab_entry)
+            # Clean empty tab lists
+            signer["tabs"] = {k: v for k, v in tabs.items() if v}
+        signers.append(signer)
+
+    body = {
+        "emailSubject": subject,
+        "emailBlurb":   message,
+        "documents": [{
+            "documentBase64": clean_b64,
+            "name":           filename or "document.pdf",
+            "fileExtension":  "pdf",
+            "documentId":     "1",
+        }],
+        "recipients": {"signers": signers},
+        "status": "sent",
+    }
+
+    r = _post(token, base_uri, account_id, "/envelopes", body)
+    if "error" in r:
+        return r
+    return {
+        "success":     True,
+        "envelope_id": r.get("envelopeId"),
+        "status":      "sent",
+        "recipients":  [{"name": s["name"], "email": s["email"]} for s in signers],
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# CREATE TEMPLATE FROM PDF
+# ══════════════════════════════════════════════════════════════
+
+def create_template_from_pdf(token, account_id, base_uri,
+                              pdf_base64, filename, template_name,
+                              description="", role_names=None, anchor_tabs=None):
+    """Create a reusable Docusign template from a PDF.
+    
+    role_names: list of signer role names e.g. ["Signer", "Counter-signer"]
+                Defaults to ["Signer"] if not provided.
+    anchor_tabs: optional list of {role_name, anchor_string, tab_type}
+    """
+    # Strip data URL prefix if present
+    clean_b64 = pdf_base64
+    if "," in pdf_base64[:100]:
+        clean_b64 = pdf_base64.split(",", 1)[1]
+    clean_b64 = clean_b64.strip()
+
+    roles = role_names or ["Signer"]
+
+    # Build placeholder recipients (roles)
+    signers = []
+    for i, role in enumerate(roles):
+        signer = {
+            "roleName":     role,
+            "recipientId":  str(i + 1),
+            "routingOrder": str(i + 1),
+            "name":         "",
+            "email":        "",
+        }
+        # Add tabs for this role
+        if anchor_tabs:
+            tabs = {"signHereTabs": [], "dateSignedTabs": [], "fullNameTabs": [], "initialHereTabs": []}
+            for tab in anchor_tabs:
+                if tab.get("role_name") != role:
+                    continue
+                tab_type = tab.get("tab_type", "signHere")
+                tab_entry = {
+                    "anchorString":  tab["anchor_string"],
+                    "anchorUnits":   "pixels",
+                    "anchorXOffset": str(tab.get("x_offset", 0)),
+                    "anchorYOffset": str(tab.get("y_offset", 0)),
+                }
+                if tab_type == "signHere":
+                    tabs["signHereTabs"].append(tab_entry)
+                elif tab_type == "dateSigned":
+                    tabs["dateSignedTabs"].append(tab_entry)
+                elif tab_type == "fullName":
+                    tabs["fullNameTabs"].append(tab_entry)
+                elif tab_type == "initialHere":
+                    tabs["initialHereTabs"].append(tab_entry)
+            signer["tabs"] = {k: v for k, v in tabs.items() if v}
+        signers.append(signer)
+
+    body = {
+        "name":        template_name,
+        "description": description,
+        "shared":      "false",
+        "documents": [{
+            "documentBase64": clean_b64,
+            "name":           filename or "document.pdf",
+            "fileExtension":  "pdf",
+            "documentId":     "1",
+        }],
+        "recipients": {"signers": signers},
+        "status":     "created",
+        "emailSubject": template_name,
+    }
+
+    r = _post(token, base_uri, account_id, "/templates", body)
+    if "error" in r:
+        return r
+    return {
+        "success":     True,
+        "template_id": r.get("templateId"),
+        "name":        template_name,
+        "roles":       roles,
+    }
+
+
 TOOLS = [
 
     # ── Envelopes ──────────────────────────────────────────────
@@ -525,22 +756,110 @@ TOOLS = [
             "message":      {"type": "string", "description": "Email message body (optional)"},
         }, "required": ["signer_name", "signer_email", "subject"]}
     },
+    {
+        "name": "send_envelope_with_pdf",
+        "description": "Send a PDF document as a Docusign envelope to one or more recipients for signing. Use this when the user wants to send a specific PDF file. The pdf_base64 must be provided (from an attached document). Optionally include anchor_tabs to place signature fields at specific text locations in the PDF.",
+        "input_schema": {"type": "object", "properties": {
+            "pdf_base64": {"type": "string", "description": "Base64-encoded PDF content"},
+            "filename":   {"type": "string", "description": "PDF filename e.g. contract.pdf"},
+            "recipients": {
+                "type": "array",
+                "description": "List of recipients",
+                "items": {"type": "object", "properties": {
+                    "name":         {"type": "string"},
+                    "email":        {"type": "string"},
+                    "recipient_id": {"type": "string"},
+                    "routing_order":{"type": "integer"},
+                }, "required": ["name", "email"]}
+            },
+            "subject":     {"type": "string", "description": "Email subject line"},
+            "message":     {"type": "string", "description": "Optional email message body"},
+            "anchor_tabs": {
+                "type": "array",
+                "description": "Optional signature/date field anchors. Each item: {recipient_id, anchor_string, tab_type: signHere|dateSigned|fullName|initialHere}",
+                "items": {"type": "object"}
+            },
+        }, "required": ["pdf_base64", "filename", "recipients", "subject"]}
+    },
+    {
+        "name": "create_template_from_pdf",
+        "description": "Create a reusable Docusign template from a PDF document. Use this when the user wants to save a document as a template they can send repeatedly. Optionally specify signer role names and anchor tabs for signature placement.",
+        "input_schema": {"type": "object", "properties": {
+            "pdf_base64":     {"type": "string", "description": "Base64-encoded PDF content"},
+            "filename":       {"type": "string", "description": "PDF filename"},
+            "template_name":  {"type": "string", "description": "Name for the new template"},
+            "description":    {"type": "string", "description": "Optional template description"},
+            "role_names":     {
+                "type": "array",
+                "description": "Signer role names e.g. ['Signer', 'Counter-signer']. Defaults to ['Signer'].",
+                "items": {"type": "string"}
+            },
+            "anchor_tabs": {
+                "type": "array",
+                "description": "Optional tab anchors: [{role_name, anchor_string, tab_type: signHere|dateSigned|fullName|initialHere}]",
+                "items": {"type": "object"}
+            },
+        }, "required": ["pdf_base64", "filename", "template_name"]}
+    },
 
     # ── Envelope Documents ─────────────────────────────────────
     {
         "name": "list_envelope_documents",
-        "description": "List all documents attached to an envelope.",
+        "description": "List all documents attached to an envelope with name, pages, and size.",
         "input_schema": {"type": "object", "properties": {
             "envelope_id": {"type": "string", "description": "Envelope ID"},
         }, "required": ["envelope_id"]}
     },
     {
         "name": "get_envelope_document_info",
-        "description": "Get metadata for a document in an envelope. Use document_id='combined' for the merged PDF.",
+        "description": "Get metadata for a specific document in an envelope. Use document_id='combined' for all pages merged into one PDF.",
         "input_schema": {"type": "object", "properties": {
             "envelope_id": {"type": "string", "description": "Envelope ID"},
             "document_id": {"type": "string", "description": "Document ID or 'combined'"},
         }, "required": ["envelope_id", "document_id"]}
+    },
+    {
+        "name": "delete_envelope_documents",
+        "description": "Delete one or more documents from a draft envelope.",
+        "input_schema": {"type": "object", "properties": {
+            "envelope_id":  {"type": "string", "description": "Envelope ID"},
+            "document_ids": {"type": "array",  "description": "List of document ID strings to delete", "items": {"type": "string"}},
+        }, "required": ["envelope_id", "document_ids"]}
+    },
+    {
+        "name": "get_envelope_document_fields",
+        "description": "Get custom metadata fields for a specific document in an envelope.",
+        "input_schema": {"type": "object", "properties": {
+            "envelope_id": {"type": "string", "description": "Envelope ID"},
+            "document_id": {"type": "string", "description": "Document ID"},
+        }, "required": ["envelope_id", "document_id"]}
+    },
+    {
+        "name": "create_envelope_document_fields",
+        "description": "Add custom metadata fields to a document in an envelope.",
+        "input_schema": {"type": "object", "properties": {
+            "envelope_id":      {"type": "string", "description": "Envelope ID"},
+            "document_id":      {"type": "string", "description": "Document ID"},
+            "document_fields":  {"type": "array",  "description": "List of {name, value} objects", "items": {"type": "object"}},
+        }, "required": ["envelope_id", "document_id", "document_fields"]}
+    },
+    {
+        "name": "update_envelope_document_fields",
+        "description": "Update custom metadata fields on a document in an envelope.",
+        "input_schema": {"type": "object", "properties": {
+            "envelope_id":     {"type": "string", "description": "Envelope ID"},
+            "document_id":     {"type": "string", "description": "Document ID"},
+            "document_fields": {"type": "array",  "description": "Updated {name, value} objects", "items": {"type": "object"}},
+        }, "required": ["envelope_id", "document_id", "document_fields"]}
+    },
+    {
+        "name": "delete_envelope_document_fields",
+        "description": "Delete specific custom metadata fields from a document in an envelope.",
+        "input_schema": {"type": "object", "properties": {
+            "envelope_id":     {"type": "string", "description": "Envelope ID"},
+            "document_id":     {"type": "string", "description": "Document ID"},
+            "document_fields": {"type": "array",  "description": "Fields to delete (with name)", "items": {"type": "object"}},
+        }, "required": ["envelope_id", "document_id", "document_fields"]}
     },
 
     # ── Envelope Recipients ────────────────────────────────────
@@ -677,11 +996,54 @@ TOOLS = [
     },
     {
         "name": "get_template_document_info",
-        "description": "Get metadata for a specific document within a template.",
+        "description": "Get PDF or metadata for a document in a template. Use document_id='combined' for all pages merged, or 'archive' for a ZIP of all documents.",
+        "input_schema": {"type": "object", "properties": {
+            "template_id": {"type": "string", "description": "Template ID"},
+            "document_id": {"type": "string", "description": "Document ID, 'combined', or 'archive'"},
+        }, "required": ["template_id", "document_id"]}
+    },
+    {
+        "name": "delete_template_documents",
+        "description": "Delete one or more documents from a template.",
+        "input_schema": {"type": "object", "properties": {
+            "template_id":  {"type": "string", "description": "Template ID"},
+            "document_ids": {"type": "array",  "description": "List of document ID strings to delete", "items": {"type": "string"}},
+        }, "required": ["template_id", "document_ids"]}
+    },
+    {
+        "name": "get_template_document_fields",
+        "description": "Get custom metadata fields for a specific document in a template.",
         "input_schema": {"type": "object", "properties": {
             "template_id": {"type": "string", "description": "Template ID"},
             "document_id": {"type": "string", "description": "Document ID"},
         }, "required": ["template_id", "document_id"]}
+    },
+    {
+        "name": "create_template_document_fields",
+        "description": "Add custom metadata fields to a document in a template.",
+        "input_schema": {"type": "object", "properties": {
+            "template_id":     {"type": "string", "description": "Template ID"},
+            "document_id":     {"type": "string", "description": "Document ID"},
+            "document_fields": {"type": "array",  "description": "List of {name, value} objects", "items": {"type": "object"}},
+        }, "required": ["template_id", "document_id", "document_fields"]}
+    },
+    {
+        "name": "update_template_document_fields",
+        "description": "Update custom metadata fields on a document in a template.",
+        "input_schema": {"type": "object", "properties": {
+            "template_id":     {"type": "string", "description": "Template ID"},
+            "document_id":     {"type": "string", "description": "Document ID"},
+            "document_fields": {"type": "array",  "description": "Updated {name, value} objects", "items": {"type": "object"}},
+        }, "required": ["template_id", "document_id", "document_fields"]}
+    },
+    {
+        "name": "delete_template_document_fields",
+        "description": "Delete specific custom metadata fields from a document in a template.",
+        "input_schema": {"type": "object", "properties": {
+            "template_id":     {"type": "string", "description": "Template ID"},
+            "document_id":     {"type": "string", "description": "Document ID"},
+            "document_fields": {"type": "array",  "description": "Fields to delete (with name)", "items": {"type": "object"}},
+        }, "required": ["template_id", "document_id", "document_fields"]}
     },
 
     # ── Template Recipients ────────────────────────────────────
@@ -888,8 +1250,15 @@ ACTION_MAP = {
     "get_envelope_audit_events":       get_envelope_audit_events,
     "get_envelope_form_data":          get_envelope_form_data,
     "create_and_send_envelope":        create_and_send_envelope,
-    "list_envelope_documents":         list_envelope_documents,
-    "get_envelope_document_info":      get_envelope_document_info,
+    "send_envelope_with_pdf":          send_envelope_with_pdf,
+    "create_template_from_pdf":        create_template_from_pdf,
+    "list_envelope_documents":          list_envelope_documents,
+    "get_envelope_document_info":       get_envelope_document_info,
+    "delete_envelope_documents":        delete_envelope_documents,
+    "get_envelope_document_fields":     get_envelope_document_fields,
+    "create_envelope_document_fields":  create_envelope_document_fields,
+    "update_envelope_document_fields":  update_envelope_document_fields,
+    "delete_envelope_document_fields":  delete_envelope_document_fields,
     "list_envelope_recipients":        list_envelope_recipients,
     "add_envelope_recipient":          add_envelope_recipient,
     "delete_envelope_recipient":       delete_envelope_recipient,
@@ -904,8 +1273,13 @@ ACTION_MAP = {
     "get_template":                    get_template,
     "delete_template":                 delete_template,
     "send_from_template":              send_from_template,
-    "list_template_documents":         list_template_documents,
-    "get_template_document_info":      get_template_document_info,
+    "list_template_documents":              list_template_documents,
+    "get_template_document_info":           get_template_document_info,
+    "delete_template_documents":            delete_template_documents,
+    "get_template_document_fields":         get_template_document_fields,
+    "create_template_document_fields":      create_template_document_fields,
+    "update_template_document_fields":      update_template_document_fields,
+    "delete_template_document_fields":      delete_template_document_fields,
     "list_template_recipients":        list_template_recipients,
     "add_template_recipient":          add_template_recipient,
     "delete_template_recipient":       delete_template_recipient,

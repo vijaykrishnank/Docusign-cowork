@@ -146,7 +146,18 @@ def chat_stream(message, history, token=None, account_id=None,
     corrections = _load_corrections()
     system = BASE_SYSTEM_PROMPT + _corrections_prompt(corrections)
     if pdf_base64:
-        system += "\n\n## PDF Document Attached\nThe user has attached a PDF document. It is embedded in their message as a document block. Read it fully and respond based on its actual content. Do NOT ask the user to paste text or claim you cannot read it."
+        system += (
+            "\n\n## PDF Document Attached\n"
+            "The user has attached a PDF. It is embedded in their message as a document block — read it fully.\n"
+            "NEVER ask the user to paste text or claim you cannot read the file.\n\n"
+            "When the user wants to SEND this PDF as an envelope, use the `send_envelope_with_pdf` tool. "
+            "Pass the pdf_base64 from the conversation context (it was already provided). "
+            "Ask the user for recipient name/email and subject if not already given.\n\n"
+            "When the user wants to CREATE A TEMPLATE from this PDF, use the `create_template_from_pdf` tool. "
+            "Ask for a template name and signer role names if not provided.\n\n"
+            "For anchor tabs: if the PDF contains text like /sig/, /date/, /initials/ use those as anchor_string values. "
+            "Otherwise omit anchor_tabs and DocuSign will let the sender place fields manually."
+        )
     if context:
         system += f"\n\n## Relevant Documentation\n\n{context}"
     else:
