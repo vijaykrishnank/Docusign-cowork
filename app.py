@@ -169,6 +169,39 @@ def correction():
     return jsonify({"ok": True})
 
 # ---- Health / Pages ----
+@app.route("/api/extract-pdf-fields", methods=["POST"])
+def extract_pdf_fields():
+    data     = request.get_json(force=True, silent=True) or {}
+    pdf_b64  = data.get("pdf_base64")
+    filename = data.get("filename", "document.pdf")
+
+    if not pdf_b64:
+        return jsonify({"error": "Missing pdf_base64"}), 400
+
+    try:
+        # Strip data URL prefix if present
+        clean_b64 = pdf_b64
+        if "," in pdf_b64[:100]:
+            clean_b64 = pdf_b64.split(",", 1)[1]
+        clean_b64 = clean_b64.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+
+        # Save PDF to disk temporarily
+        pdf_path = UPLOAD / f"{uuid.uuid4()}_{filename}"
+        with open(str(pdf_path), "wb") as f:
+            f.write(base64.b64decode(clean_b64))
+
+        # Convert to images and detect fields with Claude
+        images_dir  = str(UPLOAD / "images")
+        image_paths = convert_pdf_to_images(str(pdf_path), images_dir)
+        fields_data = detect_fields_with_claude(image_paths)
+
+        fields = fields_data.get("form_fields", [])
+        return jsonify({"fields": fields, "filename": filename, "count": len(fields)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
