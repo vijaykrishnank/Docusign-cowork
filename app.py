@@ -169,6 +169,88 @@ def correction():
     return jsonify({"ok": True})
 
 # ---- Health / Pages ----
+@app.route("/api/sign-now", methods=["POST"])
+def sign_now():
+    data       = request.get_json(force=True, silent=True) or {}
+    token      = data.get("token")
+    account_id = data.get("account_id")
+    base_uri   = data.get("base_uri")
+    pdf_b64    = data.get("pdf_base64")
+    filename   = data.get("filename", "document.pdf")
+    name       = data.get("signer_name", "Signer")
+    email      = data.get("signer_email", "signer@example.com")
+    return_url = data.get("return_url", "https://docusign.com")
+
+    if not all([token, account_id, base_uri, pdf_b64]):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        # Clean base64
+        clean_b64 = pdf_b64
+        if "," in pdf_b64[:100]:
+            clean_b64 = pdf_b64.split(",", 1)[1]
+        clean_b64 = clean_b64.strip().replace("\n","").replace("\r","").replace(" ","")
+
+        import requests as req_lib
+
+        # Create envelope with embedded signing (clientUserId marks it as embedded)
+        envelope_body = {
+            "emailSubject": f"Please sign: {filename}",
+            "documents": [{
+                "documentBase64": clean_b64,
+                "name": filename,
+                "fileExtension": "pdf",
+                "documentId": "1",
+            }],
+            "recipients": {
+                "signers": [{
+                    "name":         name,
+                    "email":        email,
+                    "recipientId":  "1",
+                    "clientUserId": "1",   # required for embedded signing
+                    "routingOrder": "1",
+                }]
+            },
+            "status": "sent",
+        }
+
+        r = req_lib.post(
+            f"{base_uri}/restapi/v2.1/accounts/{account_id}/envelopes",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=envelope_body,
+            timeout=30
+        )
+        if r.status_code not in [200, 201]:
+            return jsonify({"error": r.text}), 400
+
+        envelope_id = r.json()["envelopeId"]
+
+        # Get the embedded signing URL
+        view_body = {
+            "returnUrl":        return_url,
+            "authenticationMethod": "none",
+            "email":            email,
+            "userName":         name,
+            "clientUserId":     "1",
+            "recipientId":      "1",
+        }
+
+        r2 = req_lib.post(
+            f"{base_uri}/restapi/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/recipient",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=view_body,
+            timeout=30
+        )
+        if r2.status_code not in [200, 201]:
+            return jsonify({"error": r2.text}), 400
+
+        signing_url = r2.json()["url"]
+        return jsonify({"signing_url": signing_url, "envelope_id": envelope_id})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/extract-pdf-fields", methods=["POST"])
 def extract_pdf_fields():
     data     = request.get_json(force=True, silent=True) or {}
