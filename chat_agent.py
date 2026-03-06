@@ -234,8 +234,20 @@ def chat_stream(message, history, token=None, account_id=None,
                 for block in response.content:
                     if block.type == "tool_use":
                         yield _sse({"type": "action_start", "name": block.name, "inputs": block.input})
+                        inputs = dict(block.input)
+                        # Inject pdf_base64 if the tool needs it but Claude couldn't pass it directly
+                        # (Claude sees the PDF as a document block, not as extractable base64)
+                        if block.name in ("send_envelope_with_pdf", "create_template_from_pdf"):
+                            if pdf_base64 and not inputs.get("pdf_base64"):
+                                clean_b64 = pdf_base64
+                                if "," in pdf_base64[:100]:
+                                    clean_b64 = pdf_base64.split(",", 1)[1]
+                                clean_b64 = clean_b64.strip().replace("\n","").replace("\r","").replace(" ","")
+                                inputs["pdf_base64"] = clean_b64
+                            if pdf_filename and not inputs.get("filename"):
+                                inputs["filename"] = pdf_filename
                         result = execute_tool(
-                            name=block.name, inputs=block.input,
+                            name=block.name, inputs=inputs,
                             token=token, account_id=account_id, base_uri=base_uri)
                         yield _sse({"type": "action", "name": block.name, "result": result})
                         tool_results.append({
