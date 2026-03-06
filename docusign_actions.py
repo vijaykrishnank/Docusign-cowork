@@ -540,13 +540,19 @@ def send_envelope_with_pdf(token, account_id, base_uri,
                  e.g. [{"recipient_id":"1","anchor_string":"/sig1/","tab_type":"signHere"}]
     If anchor_tabs is not provided, DocuSign will use any /sig/ anchors found in the PDF.
     """
-    import base64 as b64mod
+    # Validate required inputs
+    if not recipients or not isinstance(recipients, list) or len(recipients) == 0:
+        return {"error": "recipients must be a non-empty list of {name, email} objects"}
+    if not subject:
+        return {"error": "subject is required"}
+    if not pdf_base64:
+        return {"error": "pdf_base64 is required"}
 
     # Strip data URL prefix if present
     clean_b64 = pdf_base64
     if "," in pdf_base64[:100]:
         clean_b64 = pdf_base64.split(",", 1)[1]
-    clean_b64 = clean_b64.strip()
+    clean_b64 = clean_b64.strip().replace("\n", "").replace("\r", "").replace(" ", "")
 
     # Build signers list
     signers = []
@@ -623,7 +629,7 @@ def create_template_from_pdf(token, account_id, base_uri,
     clean_b64 = pdf_base64
     if "," in pdf_base64[:100]:
         clean_b64 = pdf_base64.split(",", 1)[1]
-    clean_b64 = clean_b64.strip()
+    clean_b64 = clean_b64.strip().replace("\n", "").replace("\r", "").replace(" ", "")
 
     roles = role_names or ["Signer"]
 

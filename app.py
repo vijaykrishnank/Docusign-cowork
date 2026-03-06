@@ -86,13 +86,16 @@ def send():
     token        = data.get("token")
     account_id   = data.get("account_id")
     base_uri     = data.get("base_uri")
-    signer_name  = data.get("signer_name")
-    signer_email = data.get("signer_email")
+    recipients   = data.get("recipients", [])
     pdf_b64      = data.get("pdf_base64")
     filename     = data.get("filename", "document.pdf")
 
-    if not all([token, account_id, base_uri, signer_name, signer_email, pdf_b64]):
+    if not all([token, account_id, base_uri, pdf_b64]) or not recipients:
         return jsonify({"error": "Missing required fields"}), 400
+
+    # Back-compat: extract first recipient for legacy signer_name/signer_email
+    signer_name  = recipients[0].get("name") if recipients else data.get("signer_name")
+    signer_email = recipients[0].get("email") if recipients else data.get("signer_email")
 
     pdf_path = UPLOAD / f"{uuid.uuid4()}_{filename}"
     with open(str(pdf_path), "wb") as f:
@@ -117,7 +120,8 @@ def send():
             save_job(job_id, {"status": "running", "step": 4, "message": "Creating DocuSign template..."})
             template_id = create_template(str(pdf_path), tabs, token, account_id, base_uri)
 
-            save_job(job_id, {"status": "running", "step": 5, "message": f"Sending envelope to {signer_email}..."})
+            names_str = ", ".join(r.get("email", "") for r in recipients)
+            save_job(job_id, {"status": "running", "step": 5, "message": f"Sending envelope to {names_str}..."})
             envelope_id = send_envelope_from_template(template_id, signer_name, signer_email,
                                                       token, account_id, base_uri)
             save_job(job_id, {"status": "complete", "step": 5,
