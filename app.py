@@ -7,11 +7,12 @@ import threading
 import urllib.parse
 import requests as req
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 
 sys.path.insert(0, str(Path(__file__).parent))
 from claude_detect_fields import convert_pdf_to_images, detect_fields_with_claude
 from docusign_agent import build_docusign_tabs, create_template, send_envelope_from_template
+from chat_agent import chat_stream, save_correction
 
 app    = Flask(__name__)
 UPLOAD = Path("uploads")
@@ -136,6 +137,34 @@ def job_status(job_id):
         return jsonify({"error": "Job not found"}), 404
     return jsonify(job)
 
+# ---- Chat ----
+@app.route("/api/chat", methods=["POST"])
+def chat_api():
+    data = request.get_json(force=True, silent=True) or {}
+    def generate():
+        yield from chat_stream(
+            message      = data.get("message", ""),
+            history      = data.get("history", []),
+            token        = data.get("token"),
+            account_id   = data.get("account_id"),
+            base_uri     = data.get("base_uri"),
+            sender_email = data.get("sender_email"),
+            pdf_base64   = data.get("pdf_base64"),
+            pdf_filename = data.get("pdf_filename"),
+        )
+    return Response(stream_with_context(generate()), mimetype="text/event-stream")
+
+@app.route("/api/correction", methods=["POST"])
+def correction():
+    data = request.get_json(force=True, silent=True) or {}
+    save_correction(
+        message_text  = data.get("message", ""),
+        flagged_answer= data.get("flagged_answer", ""),
+        feedback      = data.get("feedback", ""),
+    )
+    return jsonify({"ok": True})
+
+# ---- Health / Pages ----
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -145,7 +174,7 @@ def index():
     return send_from_directory(".", "index.html")
 
 @app.route("/chat")
-def chat():
+def chat_page():
     return send_from_directory(".", "chat.html")
 
 if __name__ == "__main__":
