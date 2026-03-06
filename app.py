@@ -60,7 +60,6 @@ def auth_callback():
     account  = next((a for a in accounts if a.get("is_default")), accounts[0])
     name     = r2.json().get("name", "Connected")
 
-    # Return token to browser via postMessage so it stores in localStorage
     return f"""<!DOCTYPE html>
 <html><body style="font-family:sans-serif;text-align:center;padding:80px;background:#080909;color:#fff">
 <h2 style="color:#4ade80">✓ Connected to DocuSign</h2>
@@ -144,6 +143,10 @@ def health():
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
+
+@app.route("/chat")
+def chat():
+    return send_from_directory(".", "chat.html")
 
 if __name__ == "__main__":
     app.run(debug=False, port=5000, threaded=True)
