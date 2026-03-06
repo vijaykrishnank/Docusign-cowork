@@ -389,6 +389,25 @@ def send_envelope_from_template(template_id: str, recipients: list,
 # app.py-compatible wrappers
 # (app.py passes a plain pdf_path string and flat signer args)
 # ---------------------------------------------------------------
+def _clamp_tabs_to_page_count(tabs: dict, pdf_path: str) -> dict:
+    """Remove any tabs whose pageNumber exceeds the actual PDF page count."""
+    try:
+        from pypdf import PdfReader
+        page_count = len(PdfReader(pdf_path).pages)
+    except Exception:
+        return tabs  # can't check — pass through unchanged
+    print(f"   PDF has {page_count} page(s) — clamping tabs...")
+    clamped = {}
+    for tab_type, tab_list in tabs.items():
+        valid = [t for t in tab_list if int(t.get("pageNumber", 1)) <= page_count]
+        removed = len(tab_list) - len(valid)
+        if removed:
+            print(f"   Removed {removed} {tab_type} tab(s) with out-of-range page numbers")
+        if valid:
+            clamped[tab_type] = valid
+    return clamped
+
+
 def create_template(pdf_path: str, tabs: dict,
                     token: str, account_id: str, base_uri: str) -> str:
     """
@@ -399,6 +418,12 @@ def create_template(pdf_path: str, tabs: dict,
 
     with open(pdf_path, "rb") as f:
         doc_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    # Clamp tabs to actual PDF page count before sending
+    safe_tabs = _clamp_tabs_to_page_count(
+        {k: v for k, v in (tabs or {}).items() if isinstance(v, list) and len(v) > 0},
+        pdf_path
+    )
 
     template_def = {
         "name":        f"{Path(pdf_path).stem} - Auto Template",
@@ -415,7 +440,7 @@ def create_template(pdf_path: str, tabs: dict,
                 "roleName":     "Signer",
                 "recipientId":  "1",
                 "routingOrder": "1",
-                "tabs":         tabs,
+                "tabs":         safe_tabs,
             }]
         },
         "emailSubject": "Please review and sign the document",
@@ -427,6 +452,15 @@ def create_template(pdf_path: str, tabs: dict,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         json=template_def
     )
+    if r.status_code not in [200, 201]:
+        # Retry without tabs as last resort
+        print(f"Template creation failed with tabs ({r.status_code}), retrying without tabs...")
+        template_def["recipients"]["signers"][0].pop("tabs", None)
+        r = requests.post(
+            f"{base_uri}/restapi/v2.1/accounts/{account_id}/templates",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=template_def
+        )
     if r.status_code not in [200, 201]:
         raise RuntimeError(f"Template creation failed ({r.status_code}):\n{r.text}")
 
