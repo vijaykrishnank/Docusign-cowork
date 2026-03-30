@@ -353,15 +353,14 @@ def fax_send():
         def run():
             try:
                 from fax_agent import send_fax_envelope
-                save_job(job_id, {"status": "running", "step": 1, "message": "Converting document to images…"})
-                save_job(job_id, {"status": "running", "step": 2, "message": "Detecting signature fields with AI…"})
-                save_job(job_id, {"status": "running", "step": 3, "message": "Building DocuSign tabs…"})
-                save_job(job_id, {"status": "running", "step": 4, "message": "Creating template…"})
-                save_job(job_id, {"status": "running", "step": 5, "message": f"Sending to {signer_email}…"})
+
+                def on_progress(step, message):
+                    save_job(job_id, {"status": "running", "step": step, "message": message})
 
                 result = send_fax_envelope(
                     clean_b64, filename, signer_name, signer_email,
-                    token, account_id, base_uri, UPLOAD
+                    token, account_id, base_uri, UPLOAD,
+                    progress_cb=on_progress
                 )
                 save_job(job_id, {
                     "status":          "complete",

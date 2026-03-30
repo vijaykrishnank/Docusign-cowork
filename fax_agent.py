@@ -142,12 +142,20 @@ def get_followup_actions(pdf_b64: str, doc_type: str) -> dict:
 def send_fax_envelope(pdf_b64: str, filename: str,
                       signer_name: str, signer_email: str,
                       token: str, account_id: str, base_uri: str,
-                      upload_dir: Path) -> dict:
+                      upload_dir: Path,
+                      progress_cb=None) -> dict:
     """
     Full pipeline: save PDF → detect fields → build tabs → create template → send envelope.
     Reuses existing docusign_agent functions.
+    progress_cb(step, message) is called at each real milestone so callers can
+    stream live progress to the client.
     """
-    # 1. Save PDF to disk
+    def _progress(step, msg):
+        if progress_cb:
+            progress_cb(step, msg)
+
+    # 1. Save PDF to disk + convert to images
+    _progress(1, "Converting document to images…")
     pdf_path = upload_dir / f"{uuid.uuid4()}_{filename}"
     with open(str(pdf_path), "wb") as f:
         f.write(base64.b64decode(pdf_b64))
@@ -155,15 +163,20 @@ def send_fax_envelope(pdf_b64: str, filename: str,
     # 2. Convert to images & detect fields
     images_dir = str(upload_dir / "fax_images")
     image_paths = convert_pdf_to_images(str(pdf_path), images_dir)
+    _progress(2, "Detecting signature fields with AI…")
     fields_data = detect_fields_with_claude(image_paths)
+    count = len(fields_data.get("form_fields", []))
 
     # 3. Build DocuSign tabs
+    _progress(3, f"Found {count} field(s) — building DocuSign tabs…")
     tabs = build_docusign_tabs(fields_data)
 
     # 4. Create template
+    _progress(4, "Creating DocuSign template…")
     template_id = create_template(str(pdf_path), tabs, token, account_id, base_uri)
 
     # 5. Send envelope
+    _progress(5, f"Sending envelope to {signer_email}…")
     envelope_id = send_envelope_from_template(
         template_id, signer_name, signer_email, token, account_id, base_uri
     )
@@ -171,5 +184,5 @@ def send_fax_envelope(pdf_b64: str, filename: str,
     return {
         "envelope_id": envelope_id,
         "template_id": template_id,
-        "fields_detected": len(fields_data.get("form_fields", [])),
+        "fields_detected": count,
     }
