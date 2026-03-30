@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HealthFax — Automated Fax Processing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #F0F4F8;
+    --surface:     #FFFFFF;
+    --card:        #FFFFFF;
+    --border:      #D9E2EC;
+    --border-soft: #EDF2F7;
+    --cobalt:      #1B4FD8;
+    --cobalt-dim:  #1640B0;
+    --cobalt-soft: rgba(27,79,216,0.07);
+    --cobalt-glow: rgba(27,79,216,0.15);
+    --green:       #0E7A4E;
+    --green-bg:    rgba(14,122,78,0.07);
+    --amber:       #92550A;
+    --amber-bg:    rgba(146,85,10,0.07);
+    --red:         #C0392B;
+    --red-bg:      rgba(192,57,43,0.07);
+    --text:        #1A202C;
+    --text-mid:    #4A5568;
+    --text-muted:  #718096;
+    --text-light:  #A0AEC0;
+    --teal:        #0694A2;
+    --teal-bg:     rgba(6,148,162,0.07);
+    --radius:      12px;
+    --radius-lg:   18px;
+    --shadow:      0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
+    --shadow-lg:   0 4px 24px rgba(0,0,0,0.10);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-mark {
+    width: 34px;
+    height: 34px;
+    background: var(--cobalt);
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 15px;
+  }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-top: 1px;
+  }
+
+  .header-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .nav-link {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all .15s;
+  }
+
+  .nav-link:hover { background: var(--bg); color: var(--text); }
+
+  .auth-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    background: transparent;
+    color: var(--text-mid);
+  }
+
+  .auth-status:hover { border-color: var(--cobalt); color: var(--cobalt); background: var(--cobalt-soft); }
+  .auth-status.connected { border-color: #0E7A4E; color: #0E7A4E; background: var(--green-bg); cursor: default; }
+  .auth-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ── Main Layout ── */
+  main {
+    flex: 1;
+    display: flex;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 40px 24px;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--cobalt-soft);
+    border: 1px solid var(--cobalt-glow);
+    color: var(--cobalt);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .hero h1 {
+    font-size: 30px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.8px;
+    line-height: 1.2;
+    margin-bottom: 10px;
+  }
+
+  .hero p {
+    font-size: 14px;
+    color: var(--text-muted);
+    max-width: 480px;
+    margin: 0 auto;
+    line-height: 1.7;
+    font-weight: 400;
+  }
+
+  /* ── Pipeline Steps ── */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 36px;
+  }
+
+  .pipe-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pipe-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: var(--text-light);
+    transition: all .3s;
+    position: relative;
+  }
+
+  .pipe-icon.active {
+    border-color: var(--cobalt);
+    background: var(--cobalt-soft);
+    color: var(--cobalt);
+  }
+
+  .pipe-icon.done {
+    border-color: var(--green);
+    background: var(--green-bg);
+    color: var(--green);
+  }
+
+  .pipe-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-light);
+    text-align: center;
+    white-space: nowrap;
+    transition: color .3s;
+  }
+
+  .pipe-icon.active ~ .pipe-label,
+  .pipe-step.active .pipe-label { color: var(--cobalt); }
+  .pipe-step.done .pipe-label { color: var(--green); }
+
+  .pipe-connector {
+    width: 52px;
+    height: 2px;
+    background: var(--border);
+    margin-bottom: 22px;
+    transition: background .3s;
+    flex-shrink: 0;
+  }
+
+  .pipe-connector.done { background: var(--green); }
+
+  /* ── Upload Zone ── */
+  .upload-card {
+    background: var(--card);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: 52px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-card:hover, .upload-card.drag-over {
+    border-color: var(--cobalt);
+    background: var(--cobalt-soft);
+  }
+
+  .upload-card input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    width: 52px;
+    height: 52px;
+    background: var(--cobalt-soft);
+    border: 1px solid var(--cobalt-glow);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin: 0 auto 16px;
+    transition: all .2s;
+  }
+
+  .upload-card:hover .upload-icon {
+    background: var(--cobalt-glow);
+    transform: scale(1.05);
+  }
+
+  .upload-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .upload-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .upload-sub strong { color: var(--cobalt); }
+
+  .upload-types {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+
+  .type-chip {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  /* ── Processing State ── */
+  .processing-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 36px 40px;
+    display: none;
+    box-shadow: var(--shadow);
+  }
+
+  .processing-card.show { display: block; }
+
+  .proc-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .proc-file-icon {
+    width: 44px;
+    height: 44px;
+    background: var(--cobalt-soft);
+    border: 1px solid var(--cobalt-glow);
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .proc-filename {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .proc-size {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .proc-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .proc-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: var(--bg);
+    border: 1px solid transparent;
+    transition: all .3s;
+  }
+
+  .proc-step.active {
+    background: var(--cobalt-soft);
+    border-color: var(--cobalt-glow);
+  }
+
+  .proc-step.done {
+    background: var(--green-bg);
+    border-color: rgba(14,122,78,0.15);
+  }
+
+  .proc-step.error {
+    background: var(--red-bg);
+    border-color: rgba(192,57,43,0.15);
+  }
+
+  .proc-step-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-light);
+    flex-shrink: 0;
+    transition: all .3s;
+  }
+
+  .proc-step.active .proc-step-icon { border-color: var(--cobalt); color: var(--cobalt); background: var(--cobalt-soft); }
+  .proc-step.done .proc-step-icon   { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+  .proc-step.error .proc-step-icon  { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+
+  .proc-step-text { font-size: 12px; font-weight: 500; color: var(--text-mid); }
+  .proc-step.active .proc-step-text { color: var(--cobalt); }
+  .proc-step.done .proc-step-text   { color: var(--green); }
+  .proc-step.error .proc-step-text  { color: var(--red); }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinning { animation: spin 1s linear infinite; display: inline-block; }
+
+  /* ── Result Card ── */
+  .result-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: none;
+    box-shadow: var(--shadow);
+    margin-top: 20px;
+  }
+
+  .result-card.show { display: block; }
+
+  .result-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .result-badge {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .result-badge.accepted { background: var(--green-bg); color: var(--green); }
+  .result-badge.rejected { background: var(--red-bg); color: var(--red); }
+
+  .result-type {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .result-confidence {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+
+  .result-body { padding: 24px 28px; }
+
+  .result-reasoning {
+    font-size: 13px;
+    color: var(--text-mid);
+    line-height: 1.7;
+    padding: 14px 16px;
+    background: var(--bg);
+    border-radius: 10px;
+    border-left: 3px solid var(--cobalt);
+    margin-bottom: 20px;
+  }
+
+  .rejected-msg {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-mid);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* ── Follow-up section ── */
+  .followup-section { margin-top: 20px; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .action-tile {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+
+  .action-tile-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .action-tile-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  /* ── Signature Required ── */
+  .sig-required {
+    background: var(--amber-bg);
+    border: 1px solid rgba(146,85,10,0.2);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+
+  .sig-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--amber);
+  }
+
+  .sig-desc {
+    font-size: 12px;
+    color: var(--text-mid);
+    line-height: 1.5;
+  }
+
+  /* ── Recipient Confirmation ── */
+  .recipient-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+
+  .recip-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .field-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: 'DM Sans', sans-serif;
+    padding: 9px 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
+
+  .field-input:focus { border-color: var(--cobalt); background: var(--surface); }
+  .field-input::placeholder { color: var(--text-light); }
+
+  .recip-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--teal-bg);
+    border-radius: 8px;
+    line-height: 1.5;
+    border-left: 2px solid var(--teal);
+  }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    background: var(--cobalt);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: all .15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .btn-primary:hover:not(:disabled) { background: var(--cobalt-dim); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(27,79,216,0.25); }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-mid);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    padding: 11px 24px;
+    cursor: pointer;
+    transition: all .15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-secondary:hover { border-color: var(--cobalt); color: var(--cobalt); background: var(--cobalt-soft); }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .btn-row .btn-primary { flex: 1; }
+
+  /* ── Success ── */
+  .success-card {
+    background: var(--card);
+    border: 1px solid rgba(14,122,78,0.2);
+    border-radius: var(--radius-lg);
+    padding: 40px;
+    text-align: center;
+    display: none;
+    box-shadow: var(--shadow);
+    margin-top: 20px;
+  }
+
+  .success-card.show { display: block; }
+
+  .success-icon {
+    width: 60px;
+    height: 60px;
+    background: var(--green-bg);
+    border: 2px solid rgba(14,122,78,0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin: 0 auto 18px;
+  }
+
+  .success-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: -0.4px;
+  }
+
+  .success-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+
+  .envelope-id {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: var(--text-mid);
+    word-break: break-all;
+    margin-bottom: 24px;
+  }
+
+  .success-stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-val {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--cobalt);
+    letter-spacing: -0.5px;
+  }
+
+  .stat-lbl {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  /* ── Send progress ── */
+  .send-progress {
+    margin-top: 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px 32px;
+    display: none;
+    box-shadow: var(--shadow);
+  }
+  .send-progress.show { display: block; }
+
+  .prog-bar-wrap {
+    height: 4px;
+    background: var(--bg);
+    border-radius: 2px;
+    margin: 14px 0 16px;
+    overflow: hidden;
+  }
+
+  .prog-bar-fill {
+    height: 100%;
+    background: var(--cobalt);
+    border-radius: 2px;
+    transition: width .5s ease;
+  }
+
+  .prog-steps-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .prog-step-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .prog-step-row.active { color: var(--cobalt); font-weight: 500; }
+  .prog-step-row.done   { color: var(--green); }
+
+  /* ── Routing info ── */
+  .routing-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--teal-bg);
+    color: var(--teal);
+    border: 1px solid rgba(6,148,162,0.2);
+  }
+
+  /* ── No sig needed ── */
+  .no-sig-needed {
+    background: var(--green-bg);
+    border: 1px solid rgba(14,122,78,0.2);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* ── Upload again ── */
+  .upload-again {
+    text-align: center;
+    margin-top: 16px;
+  }
+
+  .upload-again button {
+    background: none;
+    border: none;
+    color: var(--cobalt);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">✚</div>
+    <div>
+      <div class="logo-text">HealthFax</div>
+      <div class="logo-sub">Automated Medical Document Processing</div>
+    </div>
+  </div>
+  <div class="header-nav">
+    <a href="/" class="nav-link">Agent</a>
+    <a href="/chat" class="nav-link">Chat</a>
+    <button class="auth-status" id="auth-btn">
+      <span class="dot"></span>
+      <span id="auth-label">Connect DocuSign</span>
+    </button>
+  </div>
+</header>
+
+<!-- Main -->
+<main>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">🏥 HIPAA-Aware WORKFLOW</div>
+    <h1>Hello, Provider.<br>Upload your medical document.</h1>
+    <p>We'll automatically classify it, identify required follow-ups, and route it for signature — all without manual intervention.</p>
+  </div>
+
+  <!-- Pipeline visualization -->
+  <div class="pipeline" id="pipeline">
+    <div class="pipe-step" id="pipe-0">
+      <div class="pipe-icon active">📄</div>
+      <div class="pipe-label">Upload</div>
+    </div>
+    <div class="pipe-connector" id="conn-0"></div>
+    <div class="pipe-step" id="pipe-1">
+      <div class="pipe-icon">🔍</div>
+      <div class="pipe-label">Classify</div>
+    </div>
+    <div class="pipe-connector" id="conn-1"></div>
+    <div class="pipe-step" id="pipe-2">
+      <div class="pipe-icon">📋</div>
+      <div class="pipe-label">Actions</div>
+    </div>
+    <div class="pipe-connector" id="conn-2"></div>
+    <div class="pipe-step" id="pipe-3">
+      <div class="pipe-icon">✍️</div>
+      <div class="pipe-label">Confirm</div>
+    </div>
+    <div class="pipe-connector" id="conn-3"></div>
+    <div class="pipe-step" id="pipe-4">
+      <div class="pipe-icon">✉️</div>
+      <div class="pipe-label">Send</div>
+    </div>
+  </div>
+
+  <!-- Upload card -->
+  <div class="upload-card" id="upload-card">
+    <input type="file" id="file-input" accept=".pdf,application/pdf"/>
+    <div class="upload-icon">📄</div>
+    <div class="upload-title">Drop a medical document here</div>
+    <div class="upload-sub">or <strong>click to browse</strong> — PDF files only</div>
+    <div class="upload-types">
+      <span class="type-chip">DME Orders</span>
+      <span class="type-chip">Home Health</span>
+      <span class="type-chip">Prescriptions</span>
+      <span class="type-chip">Prior Auth</span>
+      <span class="type-chip">Record Requests</span>
+      <span class="type-chip">Legal Acknowledgements</span>
+    </div>
+  </div>
+
+  <!-- Processing (classify) -->
+  <div class="processing-card" id="processing-card">
+    <div class="proc-header">
+      <div class="proc-file-icon">📄</div>
+      <div>
+        <div class="proc-filename" id="proc-filename">document.pdf</div>
+        <div class="proc-size" id="proc-size"></div>
+      </div>
+    </div>
+    <div class="proc-steps">
+      <div class="proc-step active" id="pstep-read">
+        <div class="proc-step-icon"><span class="spinning">⟳</span></div>
+        <div class="proc-step-text">Reading document…</div>
+      </div>
+      <div class="proc-step" id="pstep-classify">
+        <div class="proc-step-icon">🔍</div>
+        <div class="proc-step-text">Classifying document type</div>
+      </div>
+      <div class="proc-step" id="pstep-actions">
+        <div class="proc-step-icon">📋</div>
+        <div class="proc-step-text">Determining follow-up actions</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Classification Result -->
+  <div class="result-card" id="result-card">
+    <div class="result-header">
+      <div>
+        <div class="result-type" id="result-type">—</div>
+        <div class="result-confidence" id="result-confidence"></div>
+      </div>
+      <div class="result-badge" id="result-badge">—</div>
+    </div>
+    <div class="result-body" id="result-body">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+  <!-- Send progress -->
+  <div class="send-progress" id="send-progress">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px">Sending Envelope</div>
+    <div style="font-size:12px;color:var(--text-muted)" id="send-status-label">Starting…</div>
+    <div class="prog-bar-wrap">
+      <div class="prog-bar-fill" id="prog-fill" style="width:0%"></div>
+    </div>
+    <div class="prog-steps-grid" id="prog-steps-grid"></div>
+  </div>
+
+  <!-- Success -->
+  <div class="success-card" id="success-card">
+    <div class="success-icon">✓</div>
+    <div class="success-title">Envelope Sent</div>
+    <div class="success-sub" id="success-sub">Your document has been sent for signature.</div>
+    <div class="envelope-id" id="envelope-id-display"></div>
+    <div class="success-stats" id="success-stats"></div>
+    <div class="upload-again">
+      <button onclick="resetAll()">Process another document</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const API_BASE = '';  // same origin
+
+// ── Auth ─────────────────────────────────────────────────────
+var auth = null;
+
+(function loadAuth() {
+  var raw = localStorage.getItem('ds_auth');
+  if (raw) {
+    try { auth = JSON.parse(raw); updateAuthUI(); } catch(e) {}
+  }
+})();
+
+function updateAuthUI() {
+  var btn   = document.getElementById('auth-btn');
+  var label = document.getElementById('auth-label');
+  if (auth && auth.token) {
+    btn.className   = 'auth-status connected';
+    label.textContent = (auth.name || 'Connected').split(' ')[0] + ' ✓';
+  } else {
+    btn.className   = 'auth-status';
+    label.textContent = 'Connect DocuSign';
+  }
+}
+
+document.getElementById('auth-btn').addEventListener('click', function() {
+  if (auth && auth.token) return;
+  fetch(API_BASE + '/api/auth-url')
+    .then(r => r.json())
+    .then(d => {
+      var popup = window.open(d.url, 'ds_auth', 'width=600,height=700');
+      window.addEventListener('message', function handler(e) {
+        if (e.data && e.data.type === 'ds_auth') {
+          auth = e.data;
+          localStorage.setItem('ds_auth', JSON.stringify(auth));
+          updateAuthUI();
+          window.removeEventListener('message', handler);
+          if (popup && !popup.closed) popup.close();
+        }
+      });
+    });
+});
+
+// ── State ────────────────────────────────────────────────────
+var currentPdfB64   = null;
+var currentFilename = null;
+var currentFollowup = null;
+
+// ── Pipeline helpers ─────────────────────────────────────────
+function setPipeStep(n, state) {
+  var el = document.getElementById('pipe-' + n);
+  if (!el) return;
+  var icon = el.querySelector('.pipe-icon');
+  el.className = 'pipe-step' + (state ? ' ' + state : '');
+  icon.className = 'pipe-icon' + (state ? ' ' + state : '');
+}
+
+function setPipeConn(n, done) {
+  var el = document.getElementById('conn-' + n);
+  if (el) el.className = 'pipe-connector' + (done ? ' done' : '');
+}
+
+function setProcStep(id, state, text) {
+  var el = document.getElementById('pstep-' + id);
+  if (!el) return;
+  el.className = 'proc-step' + (state ? ' ' + state : '');
+  var icon = el.querySelector('.proc-step-icon');
+  if (state === 'active') icon.innerHTML = '<span class="spinning">⟳</span>';
+  else if (state === 'done') icon.innerHTML = '✓';
+  else if (state === 'error') icon.innerHTML = '✕';
+  if (text) el.querySelector('.proc-step-text').textContent = text;
+}
+
+// ── Upload ───────────────────────────────────────────────────
+var fileInput = document.getElementById('file-input');
+var uploadCard = document.getElementById('upload-card');
+
+uploadCard.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  uploadCard.classList.add('drag-over');
+});
+uploadCard.addEventListener('dragleave', function() {
+  uploadCard.classList.remove('drag-over');
+});
+uploadCard.addEventListener('drop', function(e) {
+  e.preventDefault();
+  uploadCard.classList.remove('drag-over');
+  var file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+fileInput.addEventListener('change', function() {
+  if (this.files[0]) processFile(this.files[0]);
+  this.value = '';
+});
+
+function processFile(file) {
+  if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
+    alert('Please upload a PDF file.');
+    return;
+  }
+
+  currentFilename = file.name;
+
+  // Show processing state
+  uploadCard.style.display = 'none';
+  show('processing-card');
+  document.getElementById('proc-filename').textContent = file.name;
+  document.getElementById('proc-size').textContent = formatBytes(file.size);
+
+  setPipeStep(0, 'done');
+  setPipeConn(0, true);
+  setPipeStep(1, 'active');
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var result = e.target.result;
+    var b64 = result.indexOf(',') !== -1 ? result.split(',')[1] : result;
+    currentPdfB64 = b64;
+    classifyDocument(b64, file.name);
+  };
+  reader.readAsDataURL(file);
+}
+
+function classifyDocument(b64, filename) {
+  setProcStep('read', 'done', 'Document read');
+  setProcStep('classify', 'active', 'Classifying document type…');
+
+  fetch(API_BASE + '/api/fax/classify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdf_base64: b64, filename: filename })
+  })
+  .then(r => r.json())
+  .then(function(data) {
+    if (data.error) {
+      setProcStep('classify', 'error', 'Classification failed: ' + data.error);
+      return;
+    }
+
+    setProcStep('classify', 'done', 'Document classified');
+    setPipeStep(1, 'done');
+    setPipeConn(1, true);
+    setPipeStep(2, 'active');
+
+    if (data.followup) {
+      setProcStep('actions', 'done', 'Follow-up actions determined');
+      setPipeStep(2, 'done');
+      setPipeConn(2, true);
+    }
+
+    setTimeout(function() {
+      hide('processing-card');
+      showResult(data);
+    }, 600);
+  })
+  .catch(function(e) {
+    setProcStep('classify', 'error', 'Error: ' + e.message);
+  });
+}
+
+// ── Result rendering ─────────────────────────────────────────
+function showResult(data) {
+  var cls    = data.classification;
+  var followup = data.followup;
+  var accepted = data.accepted;
+
+  document.getElementById('result-type').textContent = cls.type;
+  document.getElementById('result-confidence').textContent = 'Confidence: ' + cls.confidence;
+
+  var badge = document.getElementById('result-badge');
+  if (accepted) {
+    badge.className = 'result-badge accepted';
+    badge.textContent = '✓ Accepted';
+  } else {
+    badge.className = 'result-badge rejected';
+    badge.textContent = '✕ Not Accepted';
+  }
+
+  var body = document.getElementById('result-body');
+  body.innerHTML = '';
+
+  // Reasoning
+  var reasoning = document.createElement('div');
+  reasoning.className = 'result-reasoning';
+  reasoning.textContent = cls.reasoning;
+  body.appendChild(reasoning);
+
+  if (!accepted) {
+    var msg = document.createElement('div');
+    msg.className = 'rejected-msg';
+    msg.innerHTML = '<strong>This document type is not supported.</strong><br>We accept DME orders, Home Health, Prescriptions, Prior Authorizations, Medical Record Requests, and Legal Acknowledgements.';
+    body.appendChild(msg);
+    var again = document.createElement('div');
+    again.className = 'upload-again';
+    again.innerHTML = '<button onclick="resetAll()">Upload a different document</button>';
+    body.appendChild(again);
+    show('result-card');
+    return;
+  }
+
+  // Follow-up actions
+  if (followup && followup.actions) {
+    var actions = followup.actions;
+
+    currentFollowup = followup;
+
+    // Routing info
+    var routeDiv = document.createElement('div');
+    routeDiv.className = 'followup-section';
+    routeDiv.innerHTML = '<div class="section-label">Routing</div>';
+
+    var routeGrid = document.createElement('div');
+    routeGrid.className = 'action-grid';
+    routeGrid.innerHTML =
+      '<div class="action-tile"><div class="action-tile-label">Department</div><div class="action-tile-value">' + (actions.routing.department || '—') + '</div></div>' +
+      '<div class="action-tile"><div class="action-tile-label">Reason</div><div class="action-tile-value" style="font-size:12px">' + (actions.routing.reason || '—') + '</div></div>';
+    routeDiv.appendChild(routeGrid);
+    body.appendChild(routeDiv);
+
+    // Signatures
+    var sigDiv = document.createElement('div');
+    sigDiv.className = 'followup-section';
+    sigDiv.innerHTML = '<div class="section-label">Signature Requirement</div>';
+
+    if (actions.signatures && actions.signatures.required) {
+      setPipeStep(3, 'active');
+
+      // Signature required banner
+      var sigBanner = document.createElement('div');
+      sigBanner.className = 'sig-required';
+      sigBanner.innerHTML =
+        '<div class="sig-header">✍️ Signature Required</div>' +
+        '<div class="sig-desc">' + (actions.signatures.type || 'Signature is required for this document.') + '</div>';
+      sigDiv.appendChild(sigBanner);
+
+      // Recipient confirmation
+      var recipBox = document.createElement('div');
+      recipBox.className = 'recipient-box';
+      var extractedName  = actions.signatures.recipient_name  || '';
+      var extractedEmail = actions.signatures.recipient_email || '';
+
+      recipBox.innerHTML =
+        '<div class="recip-title">📬 Confirm Recipient</div>' +
+        '<div class="field-group">' +
+          '<div class="field-row">' +
+            '<div class="field-label">Full Name</div>' +
+            '<input class="field-input" id="recip-name"  placeholder="e.g. Dr. Jane Smith" value="' + escHtml(extractedName) + '"/>' +
+          '</div>' +
+          '<div class="field-row">' +
+            '<div class="field-label">Email Address</div>' +
+            '<input class="field-input" id="recip-email" type="email" placeholder="provider@clinic.com" value="' + escHtml(extractedEmail) + '"/>' +
+          '</div>' +
+        '</div>' +
+        (extractedName || extractedEmail
+          ? '<div class="recip-note">ℹ️ Recipient info was automatically extracted from the document. Please verify before sending.</div>'
+          : '<div class="recip-note">No recipient info found in the document. Please enter the provider\'s name and email.</div>'
+        );
+      sigDiv.appendChild(recipBox);
+
+      // Send button
+      if (!auth || !auth.token) {
+        var authWarn = document.createElement('div');
+        authWarn.style.cssText = 'font-size:12px;color:var(--amber);background:var(--amber-bg);border:1px solid rgba(146,85,10,0.2);border-radius:8px;padding:10px 14px;margin-bottom:10px';
+        authWarn.innerHTML = '⚠️ Connect to DocuSign first (top right) to send the envelope.';
+        sigDiv.appendChild(authWarn);
+      }
+
+      var sendBtn = document.createElement('button');
+      sendBtn.className = 'btn-primary';
+      sendBtn.id = 'btn-send-envelope';
+      sendBtn.innerHTML = '✉️ Send for Signature';
+      sendBtn.disabled = !auth || !auth.token;
+      sendBtn.addEventListener('click', function() { sendEnvelope(); });
+      sigDiv.appendChild(sendBtn);
+
+    } else {
+      // No signature needed
+      var noSig = document.createElement('div');
+      noSig.className = 'no-sig-needed';
+      noSig.innerHTML = '<span style="font-size:18px">✅</span><div>No signature required for this document type. Route to <strong>' + (actions.routing.department || 'the appropriate department') + '</strong> for processing.</div>';
+      sigDiv.appendChild(noSig);
+      setPipeStep(3, 'done');
+      setPipeConn(3, true);
+      setPipeStep(4, 'done');
+      setPipeConn(4, true);
+
+      var again2 = document.createElement('div');
+      again2.className = 'upload-again';
+      again2.style.marginTop = '16px';
+      again2.innerHTML = '<button onclick="resetAll()">Process another document</button>';
+      sigDiv.appendChild(again2);
+    }
+
+    body.appendChild(sigDiv);
+  }
+
+  show('result-card');
+}
+
+// ── Send envelope ─────────────────────────────────────────────
+function sendEnvelope() {
+  var name  = document.getElementById('recip-name').value.trim();
+  var email = document.getElementById('recip-email').value.trim();
+
+  if (!name || !email) {
+    alert('Please enter the recipient name and email.');
+    return;
+  }
+
+  if (!auth || !auth.token) {
+    alert('Please connect to DocuSign first.');
+    return;
+  }
+
+  document.getElementById('btn-send-envelope').disabled = true;
+  document.getElementById('btn-send-envelope').textContent = '⏳ Starting…';
+
+  setPipeStep(3, 'done');
+  setPipeConn(3, true);
+  setPipeStep(4, 'active');
+
+  fetch(API_BASE + '/api/fax/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      token:        auth.token,
+      account_id:   auth.account_id,
+      base_uri:     auth.base_uri,
+      pdf_base64:   currentPdfB64,
+      filename:     currentFilename,
+      signer_name:  name,
+      signer_email: email,
+    })
+  })
+  .then(r => r.json())
+  .then(function(d) {
+    if (d.error) {
+      document.getElementById('btn-send-envelope').disabled = false;
+      document.getElementById('btn-send-envelope').textContent = '✉️ Send for Signature';
+      alert('Error: ' + d.error);
+      return;
+    }
+    show('send-progress');
+    pollSendJob(d.job_id, name, email);
+  })
+  .catch(function(e) {
+    alert('Network error: ' + e.message);
+    document.getElementById('btn-send-envelope').disabled = false;
+  });
+}
+
+function pollSendJob(jobId, signerName, signerEmail) {
+  var steps = ['Reading document', 'Detecting fields', 'Building tabs', 'Creating template', 'Sending envelope'];
+  var poll = setInterval(function() {
+    fetch(API_BASE + '/api/status/' + jobId)
+      .then(r => r.json())
+      .then(function(job) {
+        var fill  = document.getElementById('prog-fill');
+        var label = document.getElementById('send-status-label');
+        var grid  = document.getElementById('prog-steps-grid');
+
+        if (fill)  fill.style.width = Math.round((job.step / 5) * 100) + '%';
+        if (label) label.textContent = job.message || 'Processing…';
+        if (grid) {
+          grid.innerHTML = steps.map(function(s, i) {
+            var cls  = i < job.step ? 'done' : i === job.step - 1 ? 'active' : '';
+            var icon = i < job.step ? '✓ ' : i === job.step - 1 ? '⟳ ' : '· ';
+            return '<div class="prog-step-row ' + cls + '">' + icon + s + '</div>';
+          }).join('');
+        }
+
+        if (job.status === 'complete') {
+          clearInterval(poll);
+          hide('send-progress');
+          setPipeStep(4, 'done');
+          setPipeConn(4, true);
+          showSuccess(job, signerName, signerEmail);
+        } else if (job.status === 'error') {
+          clearInterval(poll);
+          document.getElementById('send-status-label').textContent = '⚠ ' + (job.message || 'Error');
+          document.getElementById('prog-fill').style.background = 'var(--red)';
+        }
+      });
+  }, 1500);
+}
+
+function showSuccess(job, signerName, signerEmail) {
+  document.getElementById('success-sub').innerHTML =
+    'Envelope sent to <strong>' + escHtml(signerName) + '</strong> at <strong>' + escHtml(signerEmail) + '</strong>. They\'ll receive an email to review and sign.';
+  document.getElementById('envelope-id-display').textContent = 'Envelope ID: ' + job.envelope_id;
+  document.getElementById('success-stats').innerHTML =
+    '<div class="stat"><div class="stat-val">' + (job.fields_detected || 0) + '</div><div class="stat-lbl">Fields Detected</div></div>' +
+    '<div class="stat"><div class="stat-val">1</div><div class="stat-lbl">Recipient</div></div>' +
+    '<div class="stat"><div class="stat-val">✓</div><div class="stat-lbl">Sent</div></div>';
+  hide('result-card');
+  show('success-card');
+}
+
+// ── Utilities ─────────────────────────────────────────────────
+function show(id) { document.getElementById(id).classList.add('show'); }
+function hide(id) { document.getElementById(id).classList.remove('show'); }
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function resetAll() {
+  currentPdfB64   = null;
+  currentFilename = null;
+  currentFollowup = null;
+
+  hide('processing-card');
+  hide('result-card');
+  hide('send-progress');
+  hide('success-card');
+  uploadCard.style.display = '';
+
+  for (var i = 0; i < 5; i++) setPipeStep(i, i === 0 ? 'active' : '');
+  for (var j = 0; j < 4; j++) setPipeConn(j, false);
+
+  // Reset proc steps
+  ['read','classify','actions'].forEach(function(id) {
+    var el = document.getElementById('pstep-' + id);
+    if (el) {
+      el.className = 'proc-step';
+      el.querySelector('.proc-step-icon').innerHTML = '';
+    }
+  });
+}
+</script>
+</body>
+</html>

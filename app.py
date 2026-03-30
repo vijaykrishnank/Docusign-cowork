@@ -284,6 +284,104 @@ def extract_pdf_fields():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/fax")
+def fax_page():
+    return send_from_directory(".", "fax.html")
+
+
+@app.route("/api/fax/classify", methods=["POST"])
+def fax_classify():
+    """Step 1: Classify the uploaded medical document."""
+    data     = request.get_json(force=True, silent=True) or {}
+    pdf_b64  = data.get("pdf_base64")
+    filename = data.get("filename", "document.pdf")
+
+    if not pdf_b64:
+        return jsonify({"error": "Missing pdf_base64"}), 400
+
+    try:
+        clean_b64 = pdf_b64
+        if "," in pdf_b64[:100]:
+            clean_b64 = pdf_b64.split(",", 1)[1]
+        clean_b64 = clean_b64.strip().replace("\n","").replace("\r","").replace(" ","")
+
+        from fax_agent import classify_document, get_followup_actions, ACCEPTED_TYPES
+        classification = classify_document(clean_b64, filename)
+
+        doc_type   = classification.get("type", "Unclassified")
+        accepted   = doc_type in ACCEPTED_TYPES
+
+        followup = None
+        if accepted:
+            followup = get_followup_actions(clean_b64, doc_type)
+
+        return jsonify({
+            "classification": classification,
+            "accepted":       accepted,
+            "followup":       followup,
+        })
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/fax/send", methods=["POST"])
+def fax_send():
+    """Step 2: Send the envelope after provider confirms recipient."""
+    data         = request.get_json(force=True, silent=True) or {}
+    token        = data.get("token")
+    account_id   = data.get("account_id")
+    base_uri     = data.get("base_uri")
+    pdf_b64      = data.get("pdf_base64")
+    filename     = data.get("filename", "document.pdf")
+    signer_name  = data.get("signer_name")
+    signer_email = data.get("signer_email")
+
+    if not all([token, account_id, base_uri, pdf_b64, signer_name, signer_email]):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        clean_b64 = pdf_b64
+        if "," in pdf_b64[:100]:
+            clean_b64 = pdf_b64.split(",", 1)[1]
+        clean_b64 = clean_b64.strip().replace("\n","").replace("\r","").replace(" ","")
+
+        job_id = str(uuid.uuid4())
+        save_job(job_id, {"status": "running", "step": 1, "message": "Starting fax processing…"})
+
+        def run():
+            try:
+                from fax_agent import send_fax_envelope
+                save_job(job_id, {"status": "running", "step": 1, "message": "Converting document to images…"})
+                save_job(job_id, {"status": "running", "step": 2, "message": "Detecting signature fields with AI…"})
+                save_job(job_id, {"status": "running", "step": 3, "message": "Building DocuSign tabs…"})
+                save_job(job_id, {"status": "running", "step": 4, "message": "Creating template…"})
+                save_job(job_id, {"status": "running", "step": 5, "message": f"Sending to {signer_email}…"})
+
+                result = send_fax_envelope(
+                    clean_b64, filename, signer_name, signer_email,
+                    token, account_id, base_uri, UPLOAD
+                )
+                save_job(job_id, {
+                    "status":          "complete",
+                    "step":            5,
+                    "message":         "Envelope sent successfully!",
+                    "envelope_id":     result["envelope_id"],
+                    "template_id":     result["template_id"],
+                    "fields_detected": result["fields_detected"],
+                })
+            except Exception as e:
+                import traceback; traceback.print_exc()
+                save_job(job_id, {"status": "error", "step": -1, "message": str(e)})
+
+        threading.Thread(target=run, daemon=True).start()
+        return jsonify({"job_id": job_id})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
